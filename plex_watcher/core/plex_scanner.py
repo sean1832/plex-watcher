@@ -20,6 +20,9 @@ class PlexScanner:
         # sort so deepest paths come first (to handle nested libraries)
         self._roots = sorted(mapping, key=lambda x: len(str(x[0])), reverse=True)
 
+        for root, sec in self._roots:
+            print(f"Found Plex section: '{sec.title}' at {root}")
+
     def scan_partial(self, path: str) -> None:
         """Scan a specific library section.
 
