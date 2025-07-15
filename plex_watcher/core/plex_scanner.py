@@ -51,37 +51,37 @@ class PlexScanner:
         subsequence of local_path.parts (case‑insensitive), then
         append any extra child segments.
         """
-        local_parts = [p.lower() for p in local_path.parts if p not in (os.sep,)]
+        # Strip out the leading slash so indexing lines up
+        parts = [p for p in local_path.parts if p != os.sep]
+        lower_parts = [p.lower() for p in parts]
+
         best_root = None
         best_k = 0
-        best_children = ()
+        best_children: tuple[str, ...] = ()
 
         for plex_root, _ in self._roots:
-            plex_parts = [p.lower() for p in plex_root.parts if p not in (os.sep,)]
-            max_k = min(len(plex_parts), len(local_parts))
+            plex_parts = [p for p in plex_root.parts if p != os.sep]
+            lower_plex = [p.lower() for p in plex_parts]
+            max_k = min(len(plex_parts), len(parts))
 
-            # try from longest suffix→shortest
+            # try longest suffix→shortest
             for k in range(max_k, 0, -1):
-                suffix = plex_parts[-k:]
-                # look for this suffix anywhere in local_parts
-                for idx in range(len(local_parts) - k + 1):
-                    if local_parts[idx : idx + k] == suffix:
-                        # record children beyond the match
-                        children = local_path.parts[idx + k :]
+                suffix = lower_plex[-k:]
+                for idx in range(len(lower_parts) - k + 1):
+                    if lower_parts[idx : idx + k] == suffix:
+                        # now slice children from the same 'parts' list
+                        children = tuple(parts[idx + k :])
                         if k > best_k:
                             best_root = plex_root
                             best_k = k
                             best_children = children
-                        # once matched this k, no need to slide idx further
                         break
                 if best_k == k:
-                    # found the longest possible for this root
                     break
 
         if best_root and best_k > 0:
             return Path(*best_root.parts, *best_children)
         else:
-            # fallback if nothing aligns
             return local_path
 
     def _find_section(self, directory: Path):
