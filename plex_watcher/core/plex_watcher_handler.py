@@ -1,5 +1,4 @@
-import threading
-from typing import Optional
+import time
 import watchdog.events
 from watchdog.observers.api import BaseObserver
 
@@ -16,7 +15,6 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         self.scanner = scanner
         self.observer = observer
         self.cooldown = cooldown
-        self._timer: Optional[threading.Timer] = None
 
     def _is_valid_file(self, path: str) -> bool:
         return any(path.endswith(ext) for ext in ALLOWED_EXTENSIONS)
@@ -25,13 +23,9 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         logger.info("Waiting for changes...")
 
     def _schedule_ready(self):
-        # cancel any pending “ready” so we only fire once
-        if self._timer and self._timer.is_alive():
-            self._timer.cancel()
-        # schedule a fresh “ready” after cooldown
-        self._timer = threading.Timer(self.cooldown, self._ready)
-        self._timer.daemon = True
-        self._timer.start()
+        """Schedule a call to _ready after cooldown."""
+        time.sleep(self.cooldown)
+        self._ready()
     
     def _handle_event(self, event, verb: str):
         path = str(event.src_path)
