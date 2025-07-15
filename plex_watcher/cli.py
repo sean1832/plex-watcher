@@ -23,7 +23,7 @@ def main():
     parser.add_argument("-s", "--server", type=str, help="Plex server URL")
     parser.add_argument("-t", "--token", type=str, help="Plex token")
     parser.add_argument(
-        "-i", "--interval", type=int, default=30, help="Polling interval in seconds"
+        "-i", "--interval", type=int, default=10, help="Polling interval in seconds"
     )
     args = parser.parse_args()
 
