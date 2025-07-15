@@ -46,27 +46,32 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
 
     def _get_media_root(self, path: str) -> str:
         """
-        Map a local file/folder path to the top-level media folder:
-        e.g. /.../TV-Show/Anime/Naruto/Season 1/... → .../TV-Show/Anime/Naruto
+        For any file or folder event, return the top-level item folder
+        directly under its Plex section root.
+        e.g.
+          /…/TV-Show/Anime/Naruto/Season 1/... → …/TV-Show/Anime/Naruto
+          /…/Movie/Inception/Inception.mp4    → …/Movie/Inception
         """
         p = Path(path).resolve()
-        # if it's a file, look at its parent
         if not p.is_dir():
             p = p.parent
 
-        # find which Plex root this falls under
+        # find which Plex library root this lives in
         for plex_root, _ in self.scanner._roots:
             try:
                 rel = p.relative_to(plex_root)
             except ValueError:
                 continue
-            # rel.parts[0] is the series/movie folder
+
+            # if there's at least one subfolder under the section,
+            # that's your item root
             if rel.parts:
                 return str(plex_root / rel.parts[0])
-            # rare case: file directly under library root
+
+            # (rare) file directly in the library root → just scan that dir
             return str(plex_root)
 
-        # fallback: just scan the parent dir
+        # fallback: scan the directory itself
         return str(p)
 
     def _is_valid_file(self, path: str) -> bool:
@@ -77,7 +82,7 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         if media_root in self._pending_paths:
             return  # already scheduled
 
-        logger.info(f"{verb}: {path}  -> scheduling scan for {media_root}")
+        logger.info(f"{verb}: {media_root}")
         # debounce + queue
         self._schedule_scan(media_root)
 
