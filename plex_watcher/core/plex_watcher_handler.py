@@ -1,6 +1,6 @@
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import watchdog.events
 from watchdog.observers.api import BaseObserver
@@ -44,42 +44,38 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         self._timer.daemon = True
         self._timer.start()
 
-    def _get_media_root(self, path: str) -> str:
+    def _get_media_root(self, path: str, media_type: Literal["movie", "show"]) -> str:
         """
-        For any file or folder event, return the top-level item folder
-        directly under its Plex section root.
-        e.g.
-          /.../TV-Show/Anime/Naruto/Season 1/... -> .../TV-Show/Anime/Naruto
-          /.../Movie/Inception/Inception.mp4    -> .../Movie/Inception
+        Return the top‐level item folder under its Plex section root:
+        - movie:  …/Movie/Inception/Inception.mp4  -> …/Movie/Inception
+        - show: …/TV-Show/Anime/Naruto/Season 1/E01.mp4 -> …/TV-Show/Anime/Naruto
         """
         p = Path(path)
+
+        # if it's a file, start from its parent folder
         if not p.is_dir():
             p = p.parent
 
-        # find which Plex library root this lives in
-        for plex_root, _ in self.scanner._roots:
-            try:
-                rel = p.relative_to(plex_root)
-            except ValueError:
-                continue
+        if media_type == "movie":
+            # the movie’s folder is exactly where the file lives
+            item_root = p
 
-            # if there's at least one subfolder under the section,
-            # that's your item root
-            if rel.parts:
-                return str(plex_root / rel.parts[0])
+        elif media_type == "show":
+            # skip over “Season X” and land in the show’s main folder
+            item_root = p.parent
 
-            # (rare) file directly in the library root -> just scan that dir
-            return str(plex_root)
+        else:
+            # fallback: just scan whatever folder you’ve got
+            item_root = p
 
-        # fallback: scan the directory itself
-        return str(p)
+        return str(item_root)
 
     def _is_valid_file(self, path: str) -> bool:
         return any(path.endswith(ext) for ext in ALLOWED_EXTENSIONS)
 
-    def _handle_event(self, path: str, verb: str):
+    def _handle_event(self, path: str, verb: str, media_type: Literal["movie", "show"]):
         # 1) find the local "media root" folder
-        local_item = Path(self._get_media_root(path)).resolve()
+        local_item = Path(self._get_media_root(path, media_type)).resolve()
 
         # 2) immediately turn it into the Plex path
         plex_item = self.scanner._auto_map_to_plex(local_item)
@@ -99,24 +95,24 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         else:
             path = str(event.src_path)
             if self._is_valid_file(path):
-                self._handle_event(path, "CREATED")
+                self._handle_event(path, "CREATED", self.scanner.get_type(path))
         return super().on_created(event)
 
     def on_modified(self, event):
         path = str(event.src_path)
         if not event.is_directory and self._is_valid_file(path):
-            self._handle_event(path, "MODIFIED")
+            self._handle_event(path, "MODIFIED", self.scanner.get_type(path))
         return super().on_modified(event)
 
     def on_deleted(self, event):
         path = str(event.src_path)
         if event.is_directory:
-            self._handle_event(path, "DELETED")
+            self._handle_event(path, "DELETED", self.scanner.get_type(path))
         elif self._is_valid_file(path):
-            self._handle_event(path, "DELETED")
+            self._handle_event(path, "DELETED", self.scanner.get_type(path))
 
     def on_moved(self, event):
         dest = str(event.dest_path)
         if not event.is_directory and self._is_valid_file(dest):
-            self._handle_event(dest, "MOVED")
+            self._handle_event(dest, "MOVED", self.scanner.get_type(dest))
         return super().on_moved(event)

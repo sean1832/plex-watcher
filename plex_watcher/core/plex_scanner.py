@@ -5,6 +5,7 @@ from pathlib import Path
 from plexapi.server import PlexServer
 
 from plex_watcher import logger
+from typing import Literal
 
 
 class PlexScanner:
@@ -24,6 +25,28 @@ class PlexScanner:
 
         for root, sec in self._roots:
             logger.info(f"Found Plex section: '{sec.title}' at {root}")
+    
+    def get_type(self, path: str) -> Literal["movie", "show"]:
+        """
+        Figure out whether a given file/folder belongs to your Movies or TV library,
+        and return "movie" for a Movies section, or "episode" for a TV Shows section.
+        """
+        p = Path(path)
+        # if they passed a file, look at its parent folder
+        if not p.is_dir():
+            p = p.parent
+
+        # find the Plex section this lives under
+        section = self._find_section(p)
+
+        lib_type = section.type.lower()  # e.g. "movie" or "show"
+        if lib_type == "movie":
+            return "movie"
+        elif lib_type == "show":
+            return "show"
+        else:
+            # fallback: if you ever add other libraries, treat them as movies by default
+            return "movie"
 
     def scan_section(self, plex_path: str) -> None:
         section = self._find_section(Path(plex_path))
