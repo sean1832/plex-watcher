@@ -32,9 +32,13 @@ class PlexScanner:
         p = Path(path)
         if not p.exists():
             raise FileNotFoundError(f"Path '{path}' does not exist.")
-        section = self._find_section(p.resolve())
-        section.update(str(p))  # only rescans that folder
-        print(f"Partial scan: '{section.title}' -> {p}")
+        # if it's a file, scan its parent directory; else scan the dir itself
+        target_dir = p if p.is_dir() else p.parent
+        resolved = target_dir.resolve()
+
+        section = self._find_section(resolved)
+        section.update(str(resolved))  # only rescans that folder
+        print(f"Partial scan: '{section.title}' -> {resolved}")
 
     def _find_section(self, p: Path):
         for root, sec in self._roots:
