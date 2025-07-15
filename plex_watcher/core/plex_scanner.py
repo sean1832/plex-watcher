@@ -37,7 +37,7 @@ class PlexScanner:
             mapped_dir = self._auto_map_to_plex(resolved_dir)
             try:
                 section = self._find_section(mapped_dir)
-                section.update()
+                section.update(str(mapped_dir))
                 print(f"scanning section '{section.title}' for {mapped_dir}")
                 return
             except ValueError:
