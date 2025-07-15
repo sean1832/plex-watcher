@@ -1,4 +1,5 @@
 import watchdog.events
+from watchdog.observers.api import BaseObserver
 
 from plex_watcher.core.consts import ALLOWED_EXTENSIONS
 from plex_watcher.core.plex_scanner import PlexScanner
@@ -7,37 +8,50 @@ from plex_watcher.core.plex_scanner import PlexScanner
 
 
 class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
-    def __init__(self, scanner: PlexScanner):
+    def __init__(self, scanner: PlexScanner, observer: BaseObserver):
         super().__init__()
         self.scanner = scanner
+        self.observer = observer
 
     def _is_valid_file(self, path: str) -> bool:
         return any(path.endswith(ext) for ext in ALLOWED_EXTENSIONS)
 
     def on_created(self, event):
+        # If it's a new directory, start watching it (and its subfolders)
         path = str(event.src_path)
-        if not event.is_directory and self._is_valid_file(path):
+        if event.is_directory:
+            self.observer.schedule(self, path, recursive=True)
+            print(f"Watching new directory: {path}")
+            return super().on_created(event)
+
+        if self._is_valid_file(path):
             print(f"New file created: {path}")
             self.scanner.scan_partial(path)
         return super().on_created(event)
 
     def on_modified(self, event):
-        path = str(event.src_path)
-        if not event.is_directory and self._is_valid_file(path):
-            print(f"File modified: {path}")
-            self.scanner.scan_partial(path)
+        # Only care about file changes
+        if not event.is_directory:
+            path = str(event.src_path)
+            if self._is_valid_file(path):
+                print(f"File modified: {path}")
+                self.scanner.scan_partial(path)
         return super().on_modified(event)
 
-    def on_deleted(self, event) -> None:
-        path = str(event.src_path)
-        if not event.is_directory and self._is_valid_file(path):
-            print(f"File deleted: {path}")
-            self.scanner.scan_partial(path)
+    def on_deleted(self, event):
+        if not event.is_directory:
+            path = str(event.src_path)
+            if self._is_valid_file(path):
+                print(f"File deleted: {path}")
+                self.scanner.scan_partial(path)
         return super().on_deleted(event)
 
-    def on_moved(self, event) -> None:
-        path = str(event.src_path)
-        if not event.is_directory and self._is_valid_file(path):
-            print(f"File moved from {path} to {event.dest_path}")
-            self.scanner.scan_partial(path)
+    def on_moved(self, event):
+        # Handle file renames/moves
+        if not event.is_directory:
+            src = str(event.src_path)
+            dest = str(event.dest_path)
+            if self._is_valid_file(dest):
+                print(f"File moved from {src} to {dest}")
+                self.scanner.scan_partial(dest)
         return super().on_moved(event)

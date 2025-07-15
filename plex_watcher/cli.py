@@ -31,15 +31,15 @@ def main():
     server = PlexServer(baseurl=args.server, token=args.token)
     interval = args.interval
 
-    handler = PlexWatcherHandler(PlexScanner(plex=server))
-
     observer = watchdog.observers.Observer()
+    handler = PlexWatcherHandler(PlexScanner(plex=server), observer)
     for path in paths:
         if not path.exists():
             print(f"Path '{path}' does not exist. Skipping.")
             continue
         observer.schedule(handler, str(path), recursive=True)
         print(f"Watching: {path}")
+
 
     observer.start()
     try:
