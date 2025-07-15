@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from plexapi.server import PlexServer
@@ -46,28 +47,42 @@ class PlexScanner:
 
     def _auto_map_to_plex(self, local_path: Path) -> Path:
         """
-        Automatically map a local filesystem path (e.g., NFS mount) to the Plex
-        server's internal path structure by matching subpath structure.
+        Find the Plex root whose trailing path best matches a contiguous
+        subsequence of local_path.parts (case‑insensitive), then
+        append any extra child segments.
         """
-        local_path = local_path.resolve()
-        best_match = None
-        best_match_length = -1
-        mapped_result = local_path
+        local_parts = [p.lower() for p in local_path.parts if p not in (os.sep,)]
+        best_root = None
+        best_k = 0
+        best_children = ()
 
-        for plex_root_path, _ in self._roots:
-            plex_parts = plex_root_path.parts
+        for plex_root, _ in self._roots:
+            plex_parts = [p.lower() for p in plex_root.parts if p not in (os.sep,)]
+            max_k = min(len(plex_parts), len(local_parts))
 
-            for i in range(len(plex_parts)):
-                suffix = plex_parts[i:]
-                if local_path.parts[-len(suffix) :] == suffix:
-                    prefix = plex_root_path.parts[:i]
-                    local_suffix = local_path.parts[-len(suffix) :]
-                    mapped_result = Path(*prefix, *local_suffix)
-                    if len(suffix) > best_match_length:
-                        best_match = mapped_result
-                        best_match_length = len(suffix)
+            # try from longest suffix→shortest
+            for k in range(max_k, 0, -1):
+                suffix = plex_parts[-k:]
+                # look for this suffix anywhere in local_parts
+                for idx in range(len(local_parts) - k + 1):
+                    if local_parts[idx : idx + k] == suffix:
+                        # record children beyond the match
+                        children = local_path.parts[idx + k :]
+                        if k > best_k:
+                            best_root = plex_root
+                            best_k = k
+                            best_children = children
+                        # once matched this k, no need to slide idx further
+                        break
+                if best_k == k:
+                    # found the longest possible for this root
+                    break
 
-        return best_match if best_match else local_path
+        if best_root and best_k > 0:
+            return Path(*best_root.parts, *best_children)
+        else:
+            # fallback if nothing aligns
+            return local_path
 
     def _find_section(self, directory: Path):
         for plex_root_path, section in self._roots:
