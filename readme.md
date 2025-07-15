@@ -4,6 +4,14 @@ It automatically scans for new, modified, or deleted files and updates the Plex 
 
 (This is an interal tool for personal use, not intended for public distribution.)
 
+## Installation
+clone this repository and install the required dependencies:
+```bash
+git clone https://github.com/sean1832/plex-watcher.git
+cd plex-watcher
+pip install -e .
+```
+
 
 ## Quick Start
 To start using Plex-Watcher, run the following command in your terminal:
