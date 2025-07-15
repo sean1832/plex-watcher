@@ -27,28 +27,38 @@ def main():
     if not args.path or not args.server or not args.token:
         parser.error("All arguments --path, --server, and --token are required.")
 
-    paths = [Path(p).resolve() for p in args.path]
-    server = PlexServer(baseurl=args.server, token=args.token)
-    interval = args.interval
-
     observer = watchdog.observers.Observer()
-    handler = PlexWatcherHandler(PlexScanner(plex=server), observer)
-    for path in paths:
-        if not path.exists():
-            print(f"Path '{path}' does not exist. Skipping.")
-            continue
-        observer.schedule(handler, str(path), recursive=True)
-        print(f"Watching: {path}")
-
-
-    observer.start()
     try:
-        while True:
-            time.sleep(interval)
-    except KeyboardInterrupt:
+        paths = [Path(p).resolve() for p in args.path]
+        server = PlexServer(baseurl=args.server, token=args.token)
+        interval = args.interval
+
+        handler = PlexWatcherHandler(PlexScanner(plex=server), observer)
+        for path in paths:
+            if not path.exists():
+                print(f"Path '{path}' does not exist. Skipping.")
+                continue
+            observer.schedule(handler, str(path), recursive=True)
+            print(f"Watching: {path}")
+
+        observer.start()
+        print("Plex Watcher started. Press Ctrl+C to stop.")
+        print("Waiting for changes...")
+
+        try:
+            while True:
+                time.sleep(interval)
+                print("Watching for changes...")
+        except KeyboardInterrupt:
+            observer.stop()
+            print("\nStopping Plex Watcher...")
+    except Exception as e:
+        print(f"Error: {e}")
+        print("Exiting...")
+        exit(1)
+    finally:
         observer.stop()
-        print("\nStopping Plex Watcher...")
-    observer.join()
+        observer.join()
 
 
 if __name__ == "__main__":

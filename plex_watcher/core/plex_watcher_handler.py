@@ -16,6 +16,9 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
     def _is_valid_file(self, path: str) -> bool:
         return any(path.endswith(ext) for ext in ALLOWED_EXTENSIONS)
 
+    def _ready(self):
+        print("Waiting for changes...")
+
     def on_created(self, event):
         # If it's a new directory, start watching it (and its subfolders)
         path = str(event.src_path)
@@ -30,39 +33,26 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         return super().on_created(event)
 
     def on_modified(self, event):
-        # If it's a new directory, start watching it (and its subfolders)
-        path = str(event.src_path)
-        if event.is_directory:
-            self.observer.schedule(self, path, recursive=True)
-            print(f"Watching new directory: {path}")
-            return super().on_modified(event)
-
-        if self._is_valid_file(path):
-            print(f"File modified: {path}")
-            self.scanner.scan_section(path)
+        if not event.is_directory:
+            path = str(event.src_path)
+            if self._is_valid_file(path):
+                print(f"File modified: {path}")
+                self.scanner.scan_section(path)
         return super().on_modified(event)
 
     def on_deleted(self, event):
-        # If it's a new directory, start watching it (and its subfolders)
-        path = str(event.src_path)
-        if event.is_directory:
-            self.observer.schedule(self, path, recursive=True)
-            print(f"Watching new directory: {path}")
-            return super().on_deleted(event)
-
-        if self._is_valid_file(path):
-            print(f"File deleted: {path}")
-            self.scanner.scan_section(path)
+        if not event.is_directory:
+            path = str(event.src_path)
+            if self._is_valid_file(path):
+                print(f"File deleted: {path}")
+                self.scanner.scan_section(path)
         return super().on_deleted(event)
 
     def on_moved(self, event):
-        # If it's a new directory, start watching it (and its subfolders)
-        path = str(event.dest_path)
-        if event.is_directory:
-            self.observer.schedule(self, path, recursive=True)
-            print(f"Watching new directory: {path}")
-            return super().on_moved(event)
-        if self._is_valid_file(path):
-            print(f"File moved: {event.src_path} to {path}")
-            self.scanner.scan_section(path)
+        if not event.is_directory:
+            src = str(event.src_path)
+            dest = str(event.dest_path)
+            if self._is_valid_file(dest):
+                print(f"File moved from {src} to {dest}")
+                self.scanner.scan_section(dest)
         return super().on_moved(event)
