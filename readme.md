@@ -2,8 +2,6 @@
 Plex-Watcher is a tool designed to monitor and manage media files in your Plex library. 
 It automatically scans for new, modified, or deleted files and updates the Plex library accordingly.
 
-(This is an interal tool for personal use, not intended for public distribution.)
-
 ## Installation
 clone this repository and install the required dependencies:
 ```bash
