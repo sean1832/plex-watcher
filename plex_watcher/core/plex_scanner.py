@@ -1,4 +1,5 @@
 import os
+import time
 from pathlib import Path
 
 from plexapi.server import PlexServer
@@ -26,6 +27,7 @@ class PlexScanner:
 
     def scan_section(self, plex_path: str) -> None:
         section = self._find_section(Path(plex_path))
+        time.sleep(0.5)  # avoid Plex API rate limits
         section.update(plex_path)
         logger.info(f"scanning section '{section.title}' for {plex_path}")
 
