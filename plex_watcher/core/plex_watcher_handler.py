@@ -95,24 +95,28 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         else:
             path = str(event.src_path)
             if self._is_valid_file(path):
-                self._handle_event(path, "CREATED", self.scanner.get_type(path))
+                remote_path = self.scanner._auto_map_to_plex(Path(path).resolve())
+                self._handle_event(path, "CREATED", self.scanner.get_type(str(remote_path)))
         return super().on_created(event)
 
     def on_modified(self, event):
         path = str(event.src_path)
         if not event.is_directory and self._is_valid_file(path):
-            self._handle_event(path, "MODIFIED", self.scanner.get_type(path))
+            remote_path = self.scanner._auto_map_to_plex(Path(path).resolve())
+            self._handle_event(path, "MODIFIED", self.scanner.get_type(str(remote_path)))
         return super().on_modified(event)
 
     def on_deleted(self, event):
         path = str(event.src_path)
+        remote_path = self.scanner._auto_map_to_plex(Path(path).resolve())
         if event.is_directory:
-            self._handle_event(path, "DELETED", self.scanner.get_type(path))
+            self._handle_event(path, "DELETED", self.scanner.get_type(str(remote_path)))
         elif self._is_valid_file(path):
-            self._handle_event(path, "DELETED", self.scanner.get_type(path))
+            self._handle_event(path, "DELETED", self.scanner.get_type(str(remote_path)))
 
     def on_moved(self, event):
         dest = str(event.dest_path)
+        remote_path = self.scanner._auto_map_to_plex(Path(dest).resolve())
         if not event.is_directory and self._is_valid_file(dest):
-            self._handle_event(dest, "MOVED", self.scanner.get_type(dest))
+            self._handle_event(dest, "MOVED", self.scanner.get_type(str(remote_path)))
         return super().on_moved(event)
