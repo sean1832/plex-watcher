@@ -52,24 +52,24 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         # debounce + queue
         self._schedule_scan(path)
 
-    def on_created(self, event):
-        if event.is_directory:
-            # watch new folders too
-            new_dir = str(event.src_path)
-            self.observer.schedule(self, new_dir, recursive=True)
-            logger.info(f"Watching new directory: {new_dir}")
-        else:
-            path = str(event.src_path)
-            if self._is_valid_file(path):
-                self._handle_event(path, "CREATED")
-        return super().on_created(event)
+    # def on_created(self, event):
+    #     if event.is_directory:
+    #         # watch new folders too
+    #         new_dir = str(event.src_path)
+    #         self.observer.schedule(self, new_dir, recursive=True)
+    #         logger.info(f"Watching new directory: {new_dir}")
+    #     else:
+    #         path = str(event.src_path)
+    #         if self._is_valid_file(path):
+    #             self._handle_event(path, "CREATED")
+    #     return super().on_created(event)
 
-    def on_modified(self, event):
-        if not event.is_directory:
-            path = str(event.src_path)
-            if self._is_valid_file(path):
-                self._handle_event(path, "MODIFIED")
-        return super().on_modified(event)
+    # def on_modified(self, event):
+    #     if not event.is_directory:
+    #         path = str(event.src_path)
+    #         if self._is_valid_file(path):
+    #             self._handle_event(path, "MODIFIED")
+    #     return super().on_modified(event)
 
     def on_deleted(self, event):
         if not event.is_directory:
