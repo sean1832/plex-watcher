@@ -2,6 +2,7 @@ from pathlib import Path
 
 from plexapi.server import PlexServer
 
+
 class PlexScanner:
     def __init__(self, plex: PlexServer):
         self.plex = plex
@@ -19,7 +20,7 @@ class PlexScanner:
         # sort so deepest paths come first (to handle nested libraries)
         self._roots = sorted(mapping, key=lambda x: len(str(x[0])), reverse=True)
 
-    def scan_partial(self, path: str | Path) -> None:
+    def scan_partial(self, path: str) -> None:
         """Scan a specific library section.
 
         Args:
