@@ -52,7 +52,7 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
           /.../TV-Show/Anime/Naruto/Season 1/... -> .../TV-Show/Anime/Naruto
           /.../Movie/Inception/Inception.mp4    -> .../Movie/Inception
         """
-        p = Path(path).resolve()
+        p = Path(path)
         if not p.is_dir():
             p = p.parent
 
@@ -110,9 +110,10 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
 
     def on_deleted(self, event):
         path = str(event.src_path)
-        if not event.is_directory and self._is_valid_file(path):
+        if event.is_directory:
             self._handle_event(path, "DELETED")
-        return super().on_deleted(event)
+        elif self._is_valid_file(path):
+            self._handle_event(path, "DELETED")
 
     def on_moved(self, event):
         dest = str(event.dest_path)
