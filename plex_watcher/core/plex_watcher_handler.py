@@ -14,34 +14,28 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
     def _is_valid_file(self, path: str) -> bool:
         return any(path.endswith(ext) for ext in ALLOWED_EXTENSIONS)
 
-    def on_created(self, event: watchdog.events.DirCreatedEvent | watchdog.events.FileCreatedEvent):
+    def on_created(self, event):
         path = str(event.src_path)
         if not event.is_directory and self._is_valid_file(path):
             print(f"New file created: {path}")
             self.scanner.scan_partial(path)
         return super().on_created(event)
 
-    def on_modified(
-        self, event: watchdog.events.DirModifiedEvent | watchdog.events.FileModifiedEvent
-    ):
+    def on_modified(self, event):
         path = str(event.src_path)
         if not event.is_directory and self._is_valid_file(path):
             print(f"File modified: {path}")
             self.scanner.scan_partial(path)
         return super().on_modified(event)
 
-    def on_deleted(
-        self, event: watchdog.events.DirDeletedEvent | watchdog.events.FileDeletedEvent
-    ) -> None:
+    def on_deleted(self, event) -> None:
         path = str(event.src_path)
         if not event.is_directory and self._is_valid_file(path):
             print(f"File deleted: {path}")
             self.scanner.scan_partial(path)
         return super().on_deleted(event)
 
-    def on_moved(
-        self, event: watchdog.events.DirMovedEvent | watchdog.events.FileMovedEvent
-    ) -> None:
+    def on_moved(self, event) -> None:
         path = str(event.src_path)
         if not event.is_directory and self._is_valid_file(path):
             print(f"File moved from {path} to {event.dest_path}")
