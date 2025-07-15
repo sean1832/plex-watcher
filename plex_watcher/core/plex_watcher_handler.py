@@ -26,7 +26,7 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
 
         if self._is_valid_file(path):
             print(f"New file created: {path}")
-            self.scanner.scan_partial(path)
+            self.scanner.scan_section(path)
         return super().on_created(event)
 
     def on_modified(self, event):
@@ -35,7 +35,7 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
             path = str(event.src_path)
             if self._is_valid_file(path):
                 print(f"File modified: {path}")
-                self.scanner.scan_partial(path)
+                self.scanner.scan_section(path)
         return super().on_modified(event)
 
     def on_deleted(self, event):
@@ -43,7 +43,7 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
             path = str(event.src_path)
             if self._is_valid_file(path):
                 print(f"File deleted: {path}")
-                self.scanner.scan_partial(path)
+                self.scanner.scan_section(path)
         return super().on_deleted(event)
 
     def on_moved(self, event):
@@ -53,5 +53,5 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
             dest = str(event.dest_path)
             if self._is_valid_file(dest):
                 print(f"File moved from {src} to {dest}")
-                self.scanner.scan_partial(dest)
+                self.scanner.scan_section(dest)
         return super().on_moved(event)

@@ -1,6 +1,8 @@
 import os
+import urllib.parse
 from pathlib import Path
 
+import requests
 from plexapi.server import PlexServer
 
 
@@ -22,7 +24,7 @@ class PlexScanner:
         for root, sec in self._roots:
             print(f"Found Plex section: '{sec.title}' at {root}")
 
-    def scan_partial(self, path: str) -> None:
+    def scan_section(self, path: str) -> None:
         """Scan the directory containing `path`, mapping watcher paths to Plex paths automatically."""
         watcher_path = Path(path)
         if not watcher_path.exists():
@@ -37,13 +39,29 @@ class PlexScanner:
             mapped_dir = self._auto_map_to_plex(resolved_dir)
             try:
                 section = self._find_section(mapped_dir)
-                section.update(str(mapped_dir))
-                print(f"Partial scan: '{section.title}' -> {mapped_dir}")
+                section.update()
+                print(f"scanning section '{section.title}' for {mapped_dir}")
                 return
             except ValueError:
                 continue
 
         raise ValueError(f"No Plex section found for '{watcher_path}'")
+
+    @staticmethod
+    def _partial_scan_request(host: str, token: str, section_id: int, path: str) -> None:
+        """
+        Build a scan request for the Plex server.
+        """
+
+        url = f"{host}/library/sections/{section_id}/refresh?path={path}&X-Plex-Token={token}"
+        # encode url
+        url = urllib.parse.quote(url, safe=":/?&=")
+
+        response = requests.get(url)
+        if response.status_code == 200:
+            print(f"Scan request sent successfully for {path}")
+        else:
+            print(f"Failed to send scan request: {response.status_code} - {response.text}")
 
     def _auto_map_to_plex(self, local_path: Path) -> Path:
         """
@@ -89,6 +107,20 @@ class PlexScanner:
             try:
                 directory.relative_to(plex_root_path)
                 return section
+            except ValueError:
+                continue
+        raise ValueError(f"No Plex section found for '{directory}'")
+
+    def _find_section_id(self, directory: Path) -> int:
+        """
+        Locate which Plex section this directory belongs to,
+        and return its numeric section‑ID.
+        """
+        for plex_root, section in self._roots:
+            try:
+                # if `directory` is inside this plex_root, this will not throw
+                directory.relative_to(plex_root)
+                return int(section.key)
             except ValueError:
                 continue
         raise ValueError(f"No Plex section found for '{directory}'")

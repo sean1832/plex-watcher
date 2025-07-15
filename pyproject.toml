@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Automated monitoring of Plex servers for new content"
 authors = [{ name = "sean1832" }]
 license = { text = "Apache-2.0" }
-dependencies = ["plexapi >= 4.15.16", "watchdog >= 4.0.2"]           # Core dependencies
+dependencies = ["plexapi >= 4.15.16", "watchdog >= 4.0.2", "requests"]           # Core dependencies
 
 [project.scripts]
 plex-watcher = "plex_watcher.cli:main"
