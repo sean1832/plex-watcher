@@ -1,11 +1,11 @@
 import argparse
-import time
+import sys
 from pathlib import Path
 
 import watchdog.observers
 from plexapi.server import PlexServer
 
-from plex_watcher import __version__
+from plex_watcher import __version__, logger
 from plex_watcher.core.plex_scanner import PlexScanner
 from plex_watcher.core.plex_watcher_handler import PlexWatcherHandler
 
@@ -14,6 +14,9 @@ from plex_watcher.core.plex_watcher_handler import PlexWatcherHandler
 
 
 def main():
+    # Set up basic logging
+
+    # Argument parser setup
     parser = argparse.ArgumentParser(description="Plex Watcher")
     parser.add_argument("-v", "--version", action="version", version=f"plex-watcher v{__version__}")
     parser.add_argument("-p", "--path", action="append", help="Path to watch")
@@ -27,38 +30,36 @@ def main():
     if not args.path or not args.server or not args.token:
         parser.error("All arguments --path, --server, and --token are required.")
 
-    observer = watchdog.observers.Observer()
+    # setup Plex server connection
     try:
+        observer = watchdog.observers.Observer()
         paths = [Path(p).resolve() for p in args.path]
         server = PlexServer(baseurl=args.server, token=args.token)
         interval = args.interval
 
-        handler = PlexWatcherHandler(PlexScanner(plex=server), observer)
+        handler = PlexWatcherHandler(PlexScanner(plex=server), observer, cooldown=interval)
         for path in paths:
             if not path.exists():
-                print(f"Path '{path}' does not exist. Skipping.")
+                logger.warning(f"Path '{path}' does not exist. Skipping.")
                 continue
             observer.schedule(handler, str(path), recursive=True)
-            print(f"Watching: {path}")
-
-        observer.start()
-        print("Plex Watcher started. Press Ctrl+C to stop.")
-        print("Waiting for changes...")
-
-        try:
-            while True:
-                time.sleep(interval)
-                print("Watching for changes...")
-        except KeyboardInterrupt:
-            observer.stop()
-            print("\nStopping Plex Watcher...")
+            logger.info(f"Watching: {path}")
     except Exception as e:
-        print(f"Error: {e}")
-        print("Exiting...")
-        exit(1)
+        logger.exception(f"Error initializing Plex Watcher: {e}")
+        sys.exit(1)
+
+    try:
+        observer.start()
+        logger.info("Plex Watcher started. Press Ctrl+C to stop.")
+        observer.join()  # wait for ctrl+c
+    except KeyboardInterrupt:
+        logger.info("Ctrl+C received, shutting down…")
+    except Exception as e:
+        logger.exception(f"Unexpected error during runtime: {e}")
     finally:
         observer.stop()
         observer.join()
+        logger.info("Plex Watcher stopped.")
 
 
 if __name__ == "__main__":

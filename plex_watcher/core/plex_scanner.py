@@ -4,6 +4,7 @@ from pathlib import Path
 
 import requests
 from plexapi.server import PlexServer
+from plex_watcher import logger
 
 
 class PlexScanner:
@@ -22,7 +23,7 @@ class PlexScanner:
         self._roots = sorted(mapping, key=lambda rs: len(str(rs[0])), reverse=True)
 
         for root, sec in self._roots:
-            print(f"Found Plex section: '{sec.title}' at {root}")
+            logger.info(f"Found Plex section: '{sec.title}' at {root}")
 
     def scan_section(self, path: str) -> None:
         """Scan the directory containing `path`, mapping watcher paths to Plex paths automatically."""
@@ -38,7 +39,7 @@ class PlexScanner:
             try:
                 section = self._find_section(mapped_dir)
                 section.update(str(mapped_dir))
-                print(f"scanning section '{section.title}' for {mapped_dir}")
+                logger.info(f"scanning section '{section.title}' for {mapped_dir}")
                 return
             except ValueError:
                 continue
@@ -57,9 +58,9 @@ class PlexScanner:
 
         response = requests.get(url)
         if response.status_code == 200:
-            print(f"Scan request sent successfully for {path}")
+            logger.info(f"Scan request sent successfully for {path}")
         else:
-            print(f"Failed to send scan request: {response.status_code} - {response.text}")
+            logger.exception(f"Failed to send scan request: {response.status_code} - {response.text}")
 
     def _auto_map_to_plex(self, local_path: Path) -> Path:
         """
