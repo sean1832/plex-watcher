@@ -27,8 +27,6 @@ class PlexScanner:
     def scan_section(self, path: str) -> None:
         """Scan the directory containing `path`, mapping watcher paths to Plex paths automatically."""
         watcher_path = Path(path)
-        if not watcher_path.exists():
-            raise FileNotFoundError(f"Path '{path}' does not exist.")
 
         # If it's a file, start from its parent; otherwise the directory itself
         start_dir = watcher_path if watcher_path.is_dir() else watcher_path.parent
