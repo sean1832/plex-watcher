@@ -30,7 +30,7 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         self._pending_paths.clear()
 
         # signal ready again
-        logger.info("Waiting for changes…")
+        logger.info("Waiting for changes...")
 
     def _schedule_scan(self, path: str):
         # add to queue
@@ -49,8 +49,8 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         For any file or folder event, return the top-level item folder
         directly under its Plex section root.
         e.g.
-          /…/TV-Show/Anime/Naruto/Season 1/... → …/TV-Show/Anime/Naruto
-          /…/Movie/Inception/Inception.mp4    → …/Movie/Inception
+          /.../TV-Show/Anime/Naruto/Season 1/... -> .../TV-Show/Anime/Naruto
+          /.../Movie/Inception/Inception.mp4    -> .../Movie/Inception
         """
         p = Path(path).resolve()
         if not p.is_dir():
@@ -68,7 +68,7 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
             if rel.parts:
                 return str(plex_root / rel.parts[0])
 
-            # (rare) file directly in the library root → just scan that dir
+            # (rare) file directly in the library root -> just scan that dir
             return str(plex_root)
 
         # fallback: scan the directory itself
@@ -87,7 +87,7 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         if str(plex_item) in self._pending_paths:
             return
 
-        logger.info(f"{verb}: {path}  → scheduling scan for {plex_item}")
+        logger.info(f"{verb}: {path}")
         self._schedule_scan(str(plex_item))
 
     def on_created(self, event):
