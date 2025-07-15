@@ -78,13 +78,17 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         return any(path.endswith(ext) for ext in ALLOWED_EXTENSIONS)
 
     def _handle_event(self, path: str, verb: str):
-        media_root = self._get_media_root(path)
-        if media_root in self._pending_paths:
-            return  # already scheduled
+        # 1) find the local "media root" folder
+        local_item = Path(self._get_media_root(path)).resolve()
 
-        logger.info(f"{verb}: {media_root}")
-        # debounce + queue
-        self._schedule_scan(media_root)
+        # 2) immediately turn it into the Plex path
+        plex_item = self.scanner._auto_map_to_plex(local_item)
+
+        if str(plex_item) in self._pending_paths:
+            return
+
+        logger.info(f"{verb}: {path}  → scheduling scan for {plex_item}")
+        self._schedule_scan(str(plex_item))
 
     def on_created(self, event):
         if event.is_directory:

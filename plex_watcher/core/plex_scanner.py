@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 from plexapi.server import PlexServer
+
 from plex_watcher import logger
 
 
@@ -23,31 +24,15 @@ class PlexScanner:
         for root, sec in self._roots:
             logger.info(f"Found Plex section: '{sec.title}' at {root}")
 
-    def scan_section(self, path: str) -> None:
-        """Scan the directory containing `path`, mapping watcher paths to Plex paths automatically."""
-        watcher_path = Path(path)
-
-        # If it's a file, start from its parent; otherwise the directory itself
-        start_dir = watcher_path if watcher_path.is_dir() else watcher_path.parent
-
-        # Walk up through ancestors to find a matching Plex section
-        for candidate_dir in (start_dir, *start_dir.parents):
-            resolved_dir = candidate_dir.resolve()
-            mapped_dir = self._auto_map_to_plex(resolved_dir)
-            try:
-                section = self._find_section(mapped_dir)
-                section.update(str(mapped_dir))
-                logger.info(f"scanning section '{section.title}' for {mapped_dir}")
-                return
-            except ValueError:
-                continue
-
-        raise ValueError(f"No Plex section found for '{watcher_path}'")
+    def scan_section(self, plex_path: str) -> None:
+        section = self._find_section(Path(plex_path))
+        section.update(plex_path)
+        logger.info(f"scanning section '{section.title}' for {plex_path}")
 
     def _auto_map_to_plex(self, local_path: Path) -> Path:
         """
         Find the Plex root whose trailing path best matches a contiguous
-        subsequence of local_path.parts (case‑insensitive), then
+        subsequence of local_path.parts (case-insensitive), then
         append any extra child segments.
         """
         # Strip out the leading slash so indexing lines up
