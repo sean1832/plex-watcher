@@ -1,8 +1,6 @@
 import os
-import urllib.parse
 from pathlib import Path
 
-import requests
 from plexapi.server import PlexServer
 from plex_watcher import logger
 
@@ -45,22 +43,6 @@ class PlexScanner:
                 continue
 
         raise ValueError(f"No Plex section found for '{watcher_path}'")
-
-    @staticmethod
-    def _partial_scan_request(host: str, token: str, section_id: int, path: str) -> None:
-        """
-        Build a scan request for the Plex server.
-        """
-
-        url = f"{host}/library/sections/{section_id}/refresh?path={path}&X-Plex-Token={token}"
-        # encode url
-        url = urllib.parse.quote(url, safe=":/?&=")
-
-        response = requests.get(url)
-        if response.status_code == 200:
-            logger.info(f"Scan request sent successfully for {path}")
-        else:
-            logger.exception(f"Failed to send scan request: {response.status_code} - {response.text}")
 
     def _auto_map_to_plex(self, local_path: Path) -> Path:
         """

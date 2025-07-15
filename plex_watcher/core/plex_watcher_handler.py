@@ -1,4 +1,5 @@
 import threading
+from pathlib import Path
 from typing import Optional
 
 import watchdog.events
@@ -18,7 +19,7 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         self.observer = observer
         self.cooldown = cooldown
 
-        # queue up all file-paths that need scanning
+        # queue up all media root that need scanning
         self._pending_paths: set[str] = set()
         self._timer: Optional[threading.Timer] = None
 
@@ -43,16 +44,42 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         self._timer.daemon = True
         self._timer.start()
 
+    def _get_media_root(self, path: str) -> str:
+        """
+        Map a local file/folder path to the top-level media folder:
+        e.g. /.../TV-Show/Anime/Naruto/Season 1/... → .../TV-Show/Anime/Naruto
+        """
+        p = Path(path).resolve()
+        # if it's a file, look at its parent
+        if not p.is_dir():
+            p = p.parent
+
+        # find which Plex root this falls under
+        for plex_root, _ in self.scanner._roots:
+            try:
+                rel = p.relative_to(plex_root)
+            except ValueError:
+                continue
+            # rel.parts[0] is the series/movie folder
+            if rel.parts:
+                return str(plex_root / rel.parts[0])
+            # rare case: file directly under library root
+            return str(plex_root)
+
+        # fallback: just scan the parent dir
+        return str(p)
+
     def _is_valid_file(self, path: str) -> bool:
         return any(path.endswith(ext) for ext in ALLOWED_EXTENSIONS)
 
     def _handle_event(self, path: str, verb: str):
-        if path in self._pending_paths:
+        media_root = self._get_media_root(path)
+        if media_root in self._pending_paths:
             return  # already scheduled
 
-        logger.info(f"{verb}: {path}")
+        logger.info(f"{verb}: {path}  -> scheduling scan for {media_root}")
         # debounce + queue
-        self._schedule_scan(path)
+        self._schedule_scan(media_root)
 
     def on_created(self, event):
         if event.is_directory:
