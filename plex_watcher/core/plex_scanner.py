@@ -33,48 +33,41 @@ class PlexScanner:
         # Walk up through ancestors to find a matching Plex section
         for candidate_dir in (start_dir, *start_dir.parents):
             resolved_dir = candidate_dir.resolve()
-            plex_dir = self._auto_map_to_plex(resolved_dir)
+            mapped_dir = self._auto_map_to_plex(resolved_dir)
             try:
-                section = self._find_section(plex_dir)
-                section.update(str(plex_dir))
-                print(f"Partial scan: '{section.title}' -> {plex_dir}")
+                section = self._find_section(mapped_dir)
+                section.update(str(mapped_dir))
+                print(f"Partial scan: '{section.title}' -> {mapped_dir}")
                 return
             except ValueError:
-                # Not a valid Plex section, continue up
                 continue
 
-        # If no section was matched
         raise ValueError(f"No Plex section found for '{watcher_path}'")
 
-    def _auto_map_to_plex(self, watcher_directory: Path) -> Path:
-        """Translate a local watcher directory into the Plex server's directory."""
-        watcher_parts = watcher_directory.parts
-        selected_plex_root = None
-        longest_suffix_length = 0
+    def _auto_map_to_plex(self, local_path: Path) -> Path:
+        """
+        Automatically map a local filesystem path (e.g., NFS mount) to the Plex
+        server's internal path structure by matching subpath structure.
+        """
+        local_path = local_path.resolve()
+        best_match = None
+        best_match_length = -1
+        mapped_result = local_path
 
         for plex_root_path, _ in self._roots:
             plex_parts = plex_root_path.parts
-            # Match longest common suffix segments
-            max_check = min(len(plex_parts), len(watcher_parts))
-            suffix_length = 0
-            for i in range(1, max_check + 1):
-                if plex_parts[-i] == watcher_parts[-i]:
-                    suffix_length += 1
-                else:
-                    break
 
-            if suffix_length > longest_suffix_length:
-                longest_suffix_length = suffix_length
-                selected_plex_root = plex_root_path
+            for i in range(len(plex_parts)):
+                suffix = plex_parts[i:]
+                if local_path.parts[-len(suffix) :] == suffix:
+                    prefix = plex_root_path.parts[:i]
+                    local_suffix = local_path.parts[-len(suffix) :]
+                    mapped_result = Path(*prefix, *local_suffix)
+                    if len(suffix) > best_match_length:
+                        best_match = mapped_result
+                        best_match_length = len(suffix)
 
-        # If no suffix match, return the original watcher path
-        if not selected_plex_root or longest_suffix_length == 0:
-            return watcher_directory
-
-        # Build mapped path: prefix of Plex root + matching suffix
-        prefix = selected_plex_root.parts[:-longest_suffix_length]
-        suffix = watcher_parts[-longest_suffix_length:]
-        return Path(*prefix, *suffix).resolve()
+        return best_match if best_match else local_path
 
     def _find_section(self, directory: Path):
         for plex_root_path, section in self._roots:
