@@ -25,7 +25,6 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
     def _do_scan(self):
         # scan every outstanding path, then clear the queue
         for path in self._pending_paths:
-            logger.info(f"SCANNING: {path}")
             self.scanner.scan_section(path)
         self._pending_paths.clear()
 
