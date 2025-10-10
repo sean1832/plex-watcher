@@ -21,6 +21,12 @@ If you need help with the command-line options, you can run:
 plex-watcher -h
 ```
 
+## API Server
+To start the API backend server, run:
+```bash
+python plex_watcher/api_server.py
+```
+
 
 ## Command-Line Interface
 ```
