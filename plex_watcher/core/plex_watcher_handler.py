@@ -7,6 +7,7 @@ from watchdog.observers.api import BaseObserver
 
 from plex_watcher import logger
 from plex_watcher.core.consts import ALLOWED_EXTENSIONS
+from plex_watcher.core.plex_path import PlexPath
 from plex_watcher.core.plex_scanner import PlexScanner
 
 # https://github.com/pushingkarmaorg/python-plexapi
@@ -19,36 +20,62 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         self.observer = observer
         self.cooldown = cooldown
 
-        # queue up all media root that need scanning
+        # queue up all media root that need scanning (store as strings for easy comparison)
         self._pending_paths: set[str] = set()
         self._timer: Optional[threading.Timer] = None
+        self._lock = threading.Lock()  # Thread safety for pending paths and timer
 
     def _do_scan(self):
         # scan every outstanding path, then clear the queue
-        for path in self._pending_paths:
-            self.scanner.scan_section(path)
-        self._pending_paths.clear()
+        with self._lock:
+            paths_to_scan = list(self._pending_paths)
+            self._pending_paths.clear()
+
+        for path_str in paths_to_scan:
+            try:
+                # Convert string back to PlexPath for scanning
+                plex_path = PlexPath(self.scanner._roots, Path(path_str))
+                self.scanner.scan_section(plex_path)
+            except Exception as e:
+                logger.error(f"Error scanning '{path_str}': {e}")
 
         # signal ready again
         logger.info("Waiting for changes...")
 
     def _schedule_scan(self, path: str):
-        # add to queue
-        self._pending_paths.add(path)
+        # add to queue (store as string)
+        with self._lock:
+            self._pending_paths.add(path)
 
-        # reset timer so we only fire once, cooldown after the last event
-        if self._timer and self._timer.is_alive():
-            self._timer.cancel()
+            # reset timer so we only fire once, cooldown after the last event
+            if self._timer and self._timer.is_alive():
+                self._timer.cancel()
 
-        self._timer = threading.Timer(self.cooldown, self._do_scan)
-        self._timer.daemon = True
-        self._timer.start()
+            self._timer = threading.Timer(self.cooldown, self._do_scan)
+            self._timer.daemon = True
+            self._timer.start()
+
+    def stop(self):
+        """Stop the handler and cleanup resources."""
+        with self._lock:
+            if self._timer and self._timer.is_alive():
+                self._timer.cancel()
+                self._timer = None
+            self._pending_paths.clear()
+
+    def __del__(self):
+        """Cleanup timer on deletion."""
+        try:
+            if hasattr(self, "_timer") and self._timer and self._timer.is_alive():
+                self._timer.cancel()
+        except Exception:
+            pass  # Ignore errors during cleanup
 
     def _get_media_root(self, path: str, media_type: Literal["movie", "show"]) -> str:
         """
-        Return the top‐level item folder under its Plex section root:
-        - movie:  …/Movie/Inception/Inception.mp4  -> …/Movie/Inception
-        - show: …/TV-Show/Anime/Naruto/Season 1/E01.mp4 -> …/TV-Show/Anime/Naruto
+        Return the top-level item folder under its Plex section root:
+        - movie:  .../Movie/Inception/Inception.mp4  -> .../Movie/Inception
+        - show: .../TV-Show/Anime/Naruto/Season 1/E01.mp4 -> .../TV-Show/Anime/Naruto
         """
         p = Path(path)
 
@@ -78,7 +105,7 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         local_item = Path(self._get_media_root(path, media_type)).resolve()
 
         # 2) immediately turn it into the Plex path
-        plex_item = self.scanner._auto_map_to_plex(local_item)
+        plex_item = PlexPath(self.scanner._roots, local_item)
 
         if str(plex_item) in self._pending_paths:
             return
@@ -95,15 +122,15 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
         else:
             path = str(event.src_path)
             if self._is_valid_file(path):
-                remote_path = self.scanner._auto_map_to_plex(Path(path).resolve())
-                self._handle_event(path, "CREATED", self.scanner.get_type(str(remote_path)))
+                remote_path = PlexPath(self.scanner._roots, Path(path).resolve())
+                self._handle_event(path, "CREATED", self.scanner.get_type(remote_path))
         return super().on_created(event)
 
     def on_modified(self, event):
         path = str(event.src_path)
         if not event.is_directory and self._is_valid_file(path):
-            remote_path = self.scanner._auto_map_to_plex(Path(path).resolve())
-            self._handle_event(path, "MODIFIED", self.scanner.get_type(str(remote_path)))
+            remote_path = PlexPath(self.scanner._roots, Path(path).resolve())
+            self._handle_event(path, "MODIFIED", self.scanner.get_type(remote_path))
         return super().on_modified(event)
 
     def on_deleted(self, event):
@@ -111,14 +138,15 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
             return super().on_deleted(event)
         path = str(event.src_path)
         if self._is_valid_file(path):
-            remote_path = self.scanner._auto_map_to_plex(Path(path).resolve())
-            self._handle_event(path, "DELETED", self.scanner.get_type(str(remote_path)))
+            # Use validate=False for deleted files since they no longer exist
+            remote_path = PlexPath(self.scanner._roots, Path(path).resolve(), validate=False)
+            self._handle_event(path, "DELETED", self.scanner.get_type(remote_path))
 
         return super().on_deleted(event)
 
     def on_moved(self, event):
         dest = str(event.dest_path)
-        remote_path = self.scanner._auto_map_to_plex(Path(dest).resolve())
+        remote_path = PlexPath(self.scanner._roots, Path(dest).resolve())
         if not event.is_directory and self._is_valid_file(dest):
-            self._handle_event(dest, "MOVED", self.scanner.get_type(str(remote_path)))
+            self._handle_event(dest, "MOVED", self.scanner.get_type(remote_path))
         return super().on_moved(event)
