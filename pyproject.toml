@@ -8,15 +8,15 @@ dynamic = ["version"]
 description = "Automated monitoring of Plex servers for new content"
 authors = [{ name = "sean1832" }]
 license = { text = "Apache-2.0" }
-dependencies = ["plexapi >= 4.15.16", "watchdog >= 4.0.2", "requests"]
+dependencies = ["plexapi >= 4.17.1", "watchdog >= 6.0.0", "requests>=2.32.5"]
 
 [project.optional-dependencies]
 server = ["fastapi>=0.118.1", "uvicorn>=0.37.0"]
 test = [
-    "pytest>=7.4.0",
-    "pytest-cov>=4.1.0",
-    "pytest-mock>=3.11.1",
-    "httpx>=0.24.0",
+    "pytest>=8.4.2",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.15.1",
+    "httpx>=0.28.1",
 ]
 
 [project.scripts]
