@@ -6,6 +6,7 @@ from typing import Optional
 import watchdog.observers
 from plexapi.server import PlexServer
 
+from backend import logger
 from backend.core.plex_path import PlexPath
 from backend.core.plex_scanner import PlexScanner
 from backend.core.plex_watcher_handler import PlexWatcherHandler
@@ -40,6 +41,8 @@ class PlexWatcherService:
         with self._CONFIG_PATH.open("w") as f:
             json.dump(config, f, indent=4)
 
+        logger.info(f"Configuration written to {self._CONFIG_PATH}")
+
     @classmethod
     def load_config(cls, config_path: Path) -> "PlexWatcherService":
         """Load configuration from a file and return a configured PlexWatcherService."""
@@ -53,6 +56,8 @@ class PlexWatcherService:
             service.configure(config["server"], config["token"], config.get("cooldown", 30))
         for path in config.get("paths", []):
             service.add_path(path)
+
+        logger.info("Plex Watcher Service loaded from config.")
         return service
 
     def get_status(self) -> dict:
@@ -69,18 +74,23 @@ class PlexWatcherService:
         self.scanner = PlexScanner(plex=self.server)
         self.handler = PlexWatcherHandler(self.scanner, self.observer, cooldown=self.cooldown)
         self.is_watching = False
+        logger.info(
+            f"Plex Watcher Service configured. Plex Server: {self.server._baseurl}, Cooldown: {self.cooldown}s"
+        )
 
     def add_path(self, path: str) -> None:
         p = Path(self._MEDIA_ROOT, path).resolve()
         if not p.exists():
             raise FileNotFoundError(f"Path '{p}' does not exist.")
         self.paths.add(p)
+        logger.info(f"Added path to watch list: {p}")
 
     def remove_path(self, path: str) -> None:
         """Remove a path from the watch list."""
         p = Path(self._MEDIA_ROOT, path).resolve()
         if p in self.paths:
             self.paths.discard(p)
+            logger.info(f"Removed path from watch list: {p}")
         else:
             raise ValueError(f"Path '{p}' is not in the watch list.")
 
@@ -96,6 +106,7 @@ class PlexWatcherService:
                 self.observer.schedule(self.handler, str(path), recursive=True)
             self.observer.start()
             self.is_watching = True
+            logger.info(f"Plex Watcher started. Watching ({len(self.paths)}) paths.")
 
     def stop(self) -> None:
         with self._lock:
@@ -112,6 +123,7 @@ class PlexWatcherService:
 
             # Create a new observer for potential restart
             self.observer = watchdog.observers.Observer()
+            logger.info("Plex Watcher stopped.")
 
     def restart(self) -> None:
         self.stop()
@@ -124,3 +136,4 @@ class PlexWatcherService:
         if not p.exists():
             raise FileNotFoundError(f"Path '{p}' does not exist.")
         self.scanner.scan_section(PlexPath(self.scanner._roots, p))
+        logger.info(f"Manual scan initiated for path: {p}")
