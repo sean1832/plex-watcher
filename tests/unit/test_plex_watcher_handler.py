@@ -94,7 +94,7 @@ class TestPlexWatcherHandler:
         handler._pending_paths.add("/test/path1")
         handler._pending_paths.add("/test/path2")
 
-        with patch("plex_watcher.core.plex_watcher_handler.PlexPath"):
+        with patch("backend.core.plex_watcher_handler.PlexPath"):
             handler._do_scan()
 
         assert len(handler._pending_paths) == 0
@@ -185,7 +185,7 @@ class TestPlexWatcherHandler:
 
         # BUG: This will fail because PlexPath tries to validate a deleted file
         # For now, we'll just test that the method can be called
-        with patch("plex_watcher.core.plex_watcher_handler.PlexPath"):
+        with patch("backend.core.plex_watcher_handler.PlexPath"):
             with patch.object(handler, "_handle_event") as mock_handle:
                 handler.on_deleted(event)
                 mock_handle.assert_called_once()

@@ -24,11 +24,11 @@ class TestFullWorkflow:
         test_path.mkdir()
 
         with patch(
-            "plex_watcher.core.plex_watcher_service.PlexServer",
+            "backend.core.plex_watcher_service.PlexServer",
             return_value=mock_plex_with_sections,
         ):
-            with patch("plex_watcher.core.plex_watcher_service.PlexScanner"):
-                with patch("plex_watcher.core.plex_watcher_service.PlexWatcherHandler"):
+            with patch("backend.core.plex_watcher_service.PlexScanner"):
+                with patch("backend.core.plex_watcher_service.PlexWatcherHandler"):
                     # Configure service
                     service.configure("http://localhost:32400", "test_token", 30)
 

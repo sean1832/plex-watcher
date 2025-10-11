@@ -37,11 +37,9 @@ class TestPlexWatcherService:
         """Test configuring the service."""
         service = PlexWatcherService()
 
-        with patch(
-            "plex_watcher.core.plex_watcher_service.PlexServer", return_value=mock_plex_server
-        ):
-            with patch("plex_watcher.core.plex_watcher_service.PlexScanner"):
-                with patch("plex_watcher.core.plex_watcher_service.PlexWatcherHandler"):
+        with patch("backend.core.plex_watcher_service.PlexServer", return_value=mock_plex_server):
+            with patch("backend.core.plex_watcher_service.PlexScanner"):
+                with patch("backend.core.plex_watcher_service.PlexWatcherHandler"):
                     service.configure("http://localhost:32400", "test_token", 60)
 
         assert service.server is not None
@@ -81,10 +79,13 @@ class TestPlexWatcherService:
         added_path = list(service.paths)[0]
         assert added_path.is_absolute()
 
-    def test_start_not_configured(self):
+    def test_start_not_configured(self, temp_dir):
         """Test starting service without configuration raises RuntimeError."""
         service = PlexWatcherService()
-        service.add_path(".")
+        # Create a test path in temp_dir
+        test_path = temp_dir / "media"
+        test_path.mkdir()
+        service.add_path(str(test_path))
 
         with pytest.raises(RuntimeError, match="not configured"):
             service.start()
@@ -96,11 +97,9 @@ class TestPlexWatcherService:
         test_path.mkdir()
         service.add_path(str(test_path))
 
-        with patch(
-            "plex_watcher.core.plex_watcher_service.PlexServer", return_value=mock_plex_server
-        ):
-            with patch("plex_watcher.core.plex_watcher_service.PlexScanner"):
-                with patch("plex_watcher.core.plex_watcher_service.PlexWatcherHandler"):
+        with patch("backend.core.plex_watcher_service.PlexServer", return_value=mock_plex_server):
+            with patch("backend.core.plex_watcher_service.PlexScanner"):
+                with patch("backend.core.plex_watcher_service.PlexWatcherHandler"):
                     service.configure("http://localhost:32400", "test_token", 30)
 
         service.start()
@@ -115,11 +114,9 @@ class TestPlexWatcherService:
         test_path.mkdir()
         service.add_path(str(test_path))
 
-        with patch(
-            "plex_watcher.core.plex_watcher_service.PlexServer", return_value=mock_plex_server
-        ):
-            with patch("plex_watcher.core.plex_watcher_service.PlexScanner"):
-                with patch("plex_watcher.core.plex_watcher_service.PlexWatcherHandler"):
+        with patch("backend.core.plex_watcher_service.PlexServer", return_value=mock_plex_server):
+            with patch("backend.core.plex_watcher_service.PlexScanner"):
+                with patch("backend.core.plex_watcher_service.PlexWatcherHandler"):
                     service.configure("http://localhost:32400", "test_token", 30)
 
         service.start()
@@ -136,11 +133,9 @@ class TestPlexWatcherService:
         test_path.mkdir()
         service.add_path(str(test_path))
 
-        with patch(
-            "plex_watcher.core.plex_watcher_service.PlexServer", return_value=mock_plex_server
-        ):
-            with patch("plex_watcher.core.plex_watcher_service.PlexScanner"):
-                with patch("plex_watcher.core.plex_watcher_service.PlexWatcherHandler"):
+        with patch("backend.core.plex_watcher_service.PlexServer", return_value=mock_plex_server):
+            with patch("backend.core.plex_watcher_service.PlexScanner"):
+                with patch("backend.core.plex_watcher_service.PlexWatcherHandler"):
                     service.configure("http://localhost:32400", "test_token", 30)
 
         service.start()
@@ -163,11 +158,9 @@ class TestPlexWatcherService:
         test_path.mkdir()
         service.add_path(str(test_path))
 
-        with patch(
-            "plex_watcher.core.plex_watcher_service.PlexServer", return_value=mock_plex_server
-        ):
-            with patch("plex_watcher.core.plex_watcher_service.PlexScanner"):
-                with patch("plex_watcher.core.plex_watcher_service.PlexWatcherHandler"):
+        with patch("backend.core.plex_watcher_service.PlexServer", return_value=mock_plex_server):
+            with patch("backend.core.plex_watcher_service.PlexScanner"):
+                with patch("backend.core.plex_watcher_service.PlexWatcherHandler"):
                     service.configure("http://localhost:32400", "test_token", 30)
 
         service.start()
@@ -186,11 +179,9 @@ class TestPlexWatcherService:
         """Test scanning non-existent path raises FileNotFoundError."""
         service = PlexWatcherService()
 
-        with patch(
-            "plex_watcher.core.plex_watcher_service.PlexServer", return_value=mock_plex_server
-        ):
-            with patch("plex_watcher.core.plex_watcher_service.PlexScanner"):
-                with patch("plex_watcher.core.plex_watcher_service.PlexWatcherHandler"):
+        with patch("backend.core.plex_watcher_service.PlexServer", return_value=mock_plex_server):
+            with patch("backend.core.plex_watcher_service.PlexScanner"):
+                with patch("backend.core.plex_watcher_service.PlexWatcherHandler"):
                     service.configure("http://localhost:32400", "test_token", 30)
 
         with pytest.raises(FileNotFoundError):
@@ -204,17 +195,13 @@ class TestPlexWatcherService:
 
         mock_scanner = Mock()
 
-        with patch(
-            "plex_watcher.core.plex_watcher_service.PlexServer", return_value=mock_plex_server
-        ):
-            with patch(
-                "plex_watcher.core.plex_watcher_service.PlexScanner", return_value=mock_scanner
-            ):
+        with patch("backend.core.plex_watcher_service.PlexServer", return_value=mock_plex_server):
+            with patch("backend.core.plex_watcher_service.PlexScanner", return_value=mock_scanner):
                 mock_scanner._roots = mock_roots
-                with patch("plex_watcher.core.plex_watcher_service.PlexWatcherHandler"):
+                with patch("backend.core.plex_watcher_service.PlexWatcherHandler"):
                     service.configure("http://localhost:32400", "test_token", 30)
 
-        with patch("plex_watcher.core.plex_watcher_service.PlexPath"):
+        with patch("backend.core.plex_watcher_service.PlexPath"):
             service.scan_path(str(test_path))
             mock_scanner.scan_section.assert_called_once()
 
@@ -229,11 +216,9 @@ class TestPlexWatcherServiceBugs:
         test_path.mkdir()
         service.add_path(str(test_path))
 
-        with patch(
-            "plex_watcher.core.plex_watcher_service.PlexServer", return_value=mock_plex_server
-        ):
-            with patch("plex_watcher.core.plex_watcher_service.PlexScanner"):
-                with patch("plex_watcher.core.plex_watcher_service.PlexWatcherHandler"):
+        with patch("backend.core.plex_watcher_service.PlexServer", return_value=mock_plex_server):
+            with patch("backend.core.plex_watcher_service.PlexScanner"):
+                with patch("backend.core.plex_watcher_service.PlexWatcherHandler"):
                     service.configure("http://localhost:32400", "test_token", 30)
 
         service.start()
@@ -248,11 +233,9 @@ class TestPlexWatcherServiceBugs:
         """Test starting service with no paths to watch raises error."""
         service = PlexWatcherService()
 
-        with patch(
-            "plex_watcher.core.plex_watcher_service.PlexServer", return_value=mock_plex_server
-        ):
-            with patch("plex_watcher.core.plex_watcher_service.PlexScanner"):
-                with patch("plex_watcher.core.plex_watcher_service.PlexWatcherHandler"):
+        with patch("backend.core.plex_watcher_service.PlexServer", return_value=mock_plex_server):
+            with patch("backend.core.plex_watcher_service.PlexScanner"):
+                with patch("backend.core.plex_watcher_service.PlexWatcherHandler"):
                     service.configure("http://localhost:32400", "test_token", 30)
 
         # This should now raise an error since we added validation
