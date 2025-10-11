@@ -2,18 +2,17 @@ version: '3.8'
 
 services:
   backend:
-    build:
-      context: .
-      dockerfile: dockerfile
+    image: sean1832/plex-watcher-backend:latest
     container_name: plex-watcher-backend
     ports:
-      - "8000:8000"
+      - "7788:8000"
     environment:
       - API_HOST=0.0.0.0
       - API_PORT=8000
       - LOG_LEVEL=INFO
       - MEDIA_ROOT=/media
       - CONFIG_PATH=/config/config.json
+    user: "1036:100" # <-- UID:GID. Must match the user running docker on your host system.
     volumes:
       # Mount your media directories to watch as read-only
       - /path/to/your/media:/media:ro # <-- this should be your media root which contains Movies, TV Shows, etc.
