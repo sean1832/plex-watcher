@@ -6,23 +6,14 @@ This application provides an intuitive UI for configuring paths to watch, starti
 the monitoring service, and manually triggering scans.
 """
 
-# TODO: remove path from list
 # TODO: display api error responses messages in UI
 
-import sys
 import time
-from pathlib import Path
 
 import streamlit as st
 
-# Add project root to Python path to enable 'from frontend...' imports
-# This ensures the app works when run as: streamlit run frontend/app.py
-project_root = Path(__file__).parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
-
-from frontend.api_client import get_api_client, run_async  # noqa: E402
-from frontend.components import (  # noqa: E402
+from frontend.api_client import get_api_client, run_async
+from frontend.components import (
     render_api_response,
     render_backend_info,
     render_configuration_form,
@@ -32,7 +23,7 @@ from frontend.components import (  # noqa: E402
     render_status_indicator,
     render_watch_controls,
 )
-from frontend.state import (  # noqa: E402
+from frontend.state import (
     get_backend_status,
     init_session_state,
     should_fetch_status,

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plex-watcher-frontend"
+dynamic = ["version"]
+description = "Streamlit-based web interface for Plex Watcher"
+authors = [{ name = "sean1832" }]
+license = { text = "Apache-2.0" }
+dependencies = [
+    "streamlit>=1.50.0",
+    "httpx>=0.28.1",
+    "python-dotenv>=1.1.1",
+    "pandas>=2.3.3",
+]
+
+[project.scripts]
+plex-watcher-frontend = "frontend.launcher:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "frontend.__version__" }
+
+[tool.setuptools]
+packages = ["frontend"]
+package-dir = { "frontend" = "." }
+py-modules = ["launcher"]
