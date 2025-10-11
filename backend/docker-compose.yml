@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: dockerfile
+    container_name: plex-watcher-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - LOG_LEVEL=INFO
+      - MEDIA_ROOT=/media
+      - CONFIG_PATH=/config/config.json
+    volumes:
+      # Mount your media directories to watch as read-only
+      - /path/to/your/media:/media:ro # <-- this should be your media root which contains Movies, TV Shows, etc.
+      - /path/to/your/config:/config
+    restart: unless-stopped
+    networks:
+      - plex-watcher-network
+
+networks:
+  plex-watcher-network:
+    driver: bridge

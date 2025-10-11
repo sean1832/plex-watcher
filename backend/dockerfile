@@ -1,0 +1,70 @@
+# Multi-stage build for smaller final image
+FROM python:3.11-slim as builder
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install build dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /build
+
+# Copy only dependency files first (for better layer caching)
+COPY pyproject.toml ./
+COPY __init__.py ./
+
+# Copy the core directory (required by pyproject.toml)
+COPY core ./core
+
+# Install dependencies in a virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install .
+
+# Final stage - minimal runtime image
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    API_HOST=0.0.0.0 \
+    API_PORT=8000 \
+    LOG_LEVEL=INFO
+
+# Create non-root user for security
+RUN groupadd -r plexwatcher && \
+    useradd -r -g plexwatcher -u 1000 plexwatcher
+
+# Set working directory
+WORKDIR /app
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Copy application code
+COPY --chown=plexwatcher:plexwatcher . .
+
+# Install the application
+RUN pip install --no-deps .
+
+# Switch to non-root user
+USER plexwatcher
+
+# Expose the API port (can be overridden with API_PORT env var)
+EXPOSE ${API_PORT}
+
+# Health check (uses API_PORT environment variable)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import os, requests; requests.get(f'http://localhost:{os.getenv(\"API_PORT\", \"8000\")}/status', timeout=5)" || exit 1
+
+# Run the API server with environment variables as arguments
+CMD sh -c "plex-watcher-apibackend --host ${API_HOST} --port ${API_PORT}"
