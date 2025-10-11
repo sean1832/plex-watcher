@@ -2,7 +2,8 @@
 # POST /add_path, POST /start, POST /stop, POST /scan
 # TODO: implement authentication (API key or token)
 
-
+import os
+from pathlib import Path
 from typing import List
 
 from fastapi import FastAPI, HTTPException
@@ -110,19 +111,25 @@ def main():
         "-H",
         "--host",
         type=str,
-        default="0.0.0.0",
-        help="Host to run the API server on (default: 0.0.0.0)",
+        default=os.getenv("API_HOST", "0.0.0.0"),
+        help="Host to run the API server on",
     )
     parser.add_argument(
         "-P",
         "--port",
         type=int,
-        default=7799,
-        help="Port to run the API server on (default: 7799)",
+        default=int(os.getenv("API_PORT", "8000")),
+        help="Port to run the API server on",
     )
     args = parser.parse_args()
 
-    service = PlexWatcherService()
+    config_path = Path(os.getenv("CONFIG_PATH", "config.json")).resolve()
+    if config_path.exists():
+        service = PlexWatcherService.load_config(config_path)
+        logger.info(f"Loaded configuration from {config_path}")
+    else:
+        service = PlexWatcherService()
+        logger.info("No configuration file found, starting with default settings.")
     app = router(service)
     uvicorn.run(app, host=args.host, port=args.port)
 

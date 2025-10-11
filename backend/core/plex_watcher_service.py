@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from threading import Lock
 from typing import Optional
@@ -21,6 +22,39 @@ class PlexWatcherService:
         self.is_watching: bool = False
         self._lock = Lock()  # Thread safety for state changes
 
+        self._CONFIG_PATH = Path(os.getenv("CONFIG_PATH", "config.json")).resolve()
+        self._MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", "/media")).resolve()
+
+    def write_config(self) -> None:
+        """Write the current configuration to a file."""
+        import json
+
+        config = {
+            "paths": [str(p) for p in self.paths],
+            "server": self.server._baseurl if self.server else None,
+            "token": self.server._token if self.server else None,
+            "cooldown": self.cooldown,
+        }
+        # Ensure the config directory exists
+        self._CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with self._CONFIG_PATH.open("w") as f:
+            json.dump(config, f, indent=4)
+
+    @classmethod
+    def load_config(cls, config_path: Path) -> "PlexWatcherService":
+        """Load configuration from a file and return a configured PlexWatcherService."""
+        import json
+
+        with config_path.open("r") as f:
+            config = json.load(f)
+
+        service = cls()
+        if "server" in config and "token" in config and config["server"] and config["token"]:
+            service.configure(config["server"], config["token"], config.get("cooldown", 30))
+        for path in config.get("paths", []):
+            service.add_path(path)
+        return service
+
     def get_status(self) -> dict:
         return {
             "is_watching": self.is_watching,
@@ -37,14 +71,14 @@ class PlexWatcherService:
         self.is_watching = False
 
     def add_path(self, path: str) -> None:
-        p = Path(path).resolve()
+        p = Path(self._MEDIA_ROOT, path).resolve()
         if not p.exists():
             raise FileNotFoundError(f"Path '{p}' does not exist.")
         self.paths.add(p)
 
     def remove_path(self, path: str) -> None:
         """Remove a path from the watch list."""
-        p = Path(path).resolve()
+        p = Path(self._MEDIA_ROOT, path).resolve()
         if p in self.paths:
             self.paths.discard(p)
         else:
@@ -86,7 +120,7 @@ class PlexWatcherService:
     def scan_path(self, path: str) -> None:
         if not self.scanner:
             raise RuntimeError("PlexWatcherService is not configured. Call configure() first.")
-        p = Path(path).resolve()
+        p = Path(self._MEDIA_ROOT, path).resolve()
         if not p.exists():
             raise FileNotFoundError(f"Path '{p}' does not exist.")
         self.scanner.scan_section(PlexPath(self.scanner._roots, p))
