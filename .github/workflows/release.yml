@@ -167,11 +167,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   
-  # Job 4: Build and push Docker image
-  docker:
-    name: Build and Push Docker Image
+  # Job 4: Build and push Docker images (parallel builds for each platform)
+  docker-build:
+    name: Build Docker Image (${{ matrix.platform }})
     needs: [build, upload-release-assets]
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
     
     steps:
       - name: Checkout code
@@ -197,6 +202,99 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           sed -i "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" "${{ env.BACKEND_VERSION_FILE }}"
       
+      - name: Generate platform-specific cache key
+        id: cache_key
+        run: |
+          PLATFORM_KEY=$(echo "${{ matrix.platform }}" | sed 's/\//-/g')
+          echo "platform_key=$PLATFORM_KEY" >> $GITHUB_OUTPUT
+      
+      - name: Build and tag Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME_BACKEND }}
+          tags: |
+            # Tag with version number
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.version }}
+            # Tag with major.minor
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.version }}
+            # Tag with major
+            type=semver,pattern={{major}},value=${{ steps.version.outputs.version }}
+            # Tag as latest only if not pre-release
+            type=raw,value=latest,enable=${{ needs.build.outputs.is_prerelease == 'false' }}
+            # Tag as beta/rc/alpha if pre-release
+            type=raw,value=beta,enable=${{ contains(steps.version.outputs.version, 'beta') }}
+            type=raw,value=rc,enable=${{ contains(steps.version.outputs.version, 'rc') }}
+            type=raw,value=alpha,enable=${{ contains(steps.version.outputs.version, 'alpha') }}
+          flavor: |
+            suffix=-${{ steps.cache_key.outputs.platform_key }}
+      
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ env.BACKEND_DIR }}
+          file: ./${{ env.BACKEND_DIR }}/dockerfile
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Platform-specific caching for better performance
+          cache-from: |
+            type=registry,ref=${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:buildcache-${{ steps.cache_key.outputs.platform_key }}
+            type=gha,scope=${{ steps.cache_key.outputs.platform_key }}
+          cache-to: |
+            type=registry,ref=${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:buildcache-${{ steps.cache_key.outputs.platform_key }},mode=max
+            type=gha,mode=max,scope=${{ steps.cache_key.outputs.platform_key }}
+          provenance: false
+          outputs: type=image,name=${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME_BACKEND }},push-by-digest=true,name-canonical=true,push=true
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            BUILDKIT_INLINE_CACHE=1
+      
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+      
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ steps.cache_key.outputs.platform_key }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+  
+  # Job 5: Merge platform-specific images into multi-platform manifest
+  docker-merge:
+    name: Create Multi-Platform Docker Manifest
+    needs: [build, docker-build]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Extract version
+        id: version
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
       - name: Build and tag Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -216,25 +314,23 @@ jobs:
             type=raw,value=rc,enable=${{ contains(steps.version.outputs.version, 'rc') }}
             type=raw,value=alpha,enable=${{ contains(steps.version.outputs.version, 'alpha') }}
       
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./${{ env.BACKEND_DIR }}
-          file: ./${{ env.BACKEND_DIR }}/dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            VERSION=${{ steps.version.outputs.version }}
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME_BACKEND }}@sha256:%s ' *)
+      
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:${{ steps.version.outputs.version }}
       
       - name: Docker image summary
         run: |
           echo "### Docker Image Published Successfully! 🐳" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platforms:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
