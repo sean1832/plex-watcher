@@ -107,6 +107,7 @@ class PlexWatcherService:
             self.observer.start()
             self.is_watching = True
             logger.info(f"Plex Watcher started. Watching ({len(self.paths)}) paths.")
+            self.write_config()
 
     def stop(self) -> None:
         with self._lock:
