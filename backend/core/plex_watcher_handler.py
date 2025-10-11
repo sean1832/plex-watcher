@@ -5,10 +5,10 @@ from typing import Literal, Optional
 import watchdog.events
 from watchdog.observers.api import BaseObserver
 
-from plex_watcher import logger
-from plex_watcher.core.consts import ALLOWED_EXTENSIONS
-from plex_watcher.core.plex_path import PlexPath
-from plex_watcher.core.plex_scanner import PlexScanner
+from backend import logger
+from backend.core.consts import ALLOWED_EXTENSIONS
+from backend.core.plex_path import PlexPath
+from backend.core.plex_scanner import PlexScanner
 
 # https://github.com/pushingkarmaorg/python-plexapi
 

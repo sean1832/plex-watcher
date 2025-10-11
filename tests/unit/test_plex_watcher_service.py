@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from plex_watcher.core.plex_watcher_service import PlexWatcherService
+from backend.core.plex_watcher_service import PlexWatcherService
 
 
 class TestPlexWatcherService:

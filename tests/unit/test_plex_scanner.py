@@ -5,8 +5,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from plex_watcher.core.plex_path import PlexPath
-from plex_watcher.core.plex_scanner import PlexScanner
+from backend.core.plex_path import PlexPath
+from backend.core.plex_scanner import PlexScanner
 
 
 class TestPlexScanner:

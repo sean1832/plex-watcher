@@ -9,8 +9,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from plex_watcher import logger
-from plex_watcher.core.plex_watcher_service import PlexWatcherService
+from backend import logger
+from backend.core.plex_watcher_service import PlexWatcherService
 
 
 class ScanRequest(BaseModel):

@@ -5,8 +5,8 @@ from typing import Literal
 from plexapi.library import LibrarySection
 from plexapi.server import PlexServer
 
-from plex_watcher import logger
-from plex_watcher.core.plex_path import PlexPath
+from backend import logger
+from backend.core.plex_path import PlexPath
 
 
 class PlexScanner:

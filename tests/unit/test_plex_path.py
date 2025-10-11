@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from plex_watcher.core.plex_path import PlexPath
+from backend.core.plex_path import PlexPath
 
 
 class TestPlexPath:

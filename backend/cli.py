@@ -5,9 +5,9 @@ from pathlib import Path
 import watchdog.observers
 from plexapi.server import PlexServer
 
-from plex_watcher import __version__, logger
-from plex_watcher.core.plex_scanner import PlexScanner
-from plex_watcher.core.plex_watcher_handler import PlexWatcherHandler
+from backend import __version__, logger
+from backend.core.plex_scanner import PlexScanner
+from backend.core.plex_watcher_handler import PlexWatcherHandler
 
 # usage example
 # plex-watcher --path /path/to/watch1 --path /path/to/watch2 --server http://localhost:32400 --token YOUR_PLEX_TOKEN --interval 10

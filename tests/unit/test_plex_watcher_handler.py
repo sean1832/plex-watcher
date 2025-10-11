@@ -14,7 +14,7 @@ from watchdog.events import (
     FileSystemEvent,
 )
 
-from plex_watcher.core.plex_watcher_handler import PlexWatcherHandler
+from backend.core.plex_watcher_handler import PlexWatcherHandler
 
 
 class TestPlexWatcherHandler:

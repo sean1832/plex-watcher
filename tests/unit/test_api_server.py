@@ -5,8 +5,8 @@ from unittest.mock import Mock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from plex_watcher.api_server import router
-from plex_watcher.core.plex_watcher_service import PlexWatcherService
+from backend.api_server import router
+from backend.core.plex_watcher_service import PlexWatcherService
 
 
 class TestAPIServer:

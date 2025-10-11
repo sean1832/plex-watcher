@@ -5,9 +5,9 @@ from typing import Optional
 import watchdog.observers
 from plexapi.server import PlexServer
 
-from plex_watcher.core.plex_path import PlexPath
-from plex_watcher.core.plex_scanner import PlexScanner
-from plex_watcher.core.plex_watcher_handler import PlexWatcherHandler
+from backend.core.plex_path import PlexPath
+from backend.core.plex_scanner import PlexScanner
+from backend.core.plex_watcher_handler import PlexWatcherHandler
 
 
 class PlexWatcherService:
