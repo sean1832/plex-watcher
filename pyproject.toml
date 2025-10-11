@@ -18,10 +18,10 @@ test = [
     "pytest-mock>=3.15.1",
     "httpx>=0.28.1",
 ]
-frontend = ["streamlit>=1.50.0"]
 
 [project.scripts]
 plex-watcher = "plex_watcher.cli:main"
+plex-watcher-apibackend = "plex_watcher.api_server:main"
 
 [tool.setuptools.dynamic]
 version = { attr = "plex_watcher.__version__" }

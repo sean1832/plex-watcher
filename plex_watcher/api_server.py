@@ -100,9 +100,32 @@ def router(service: PlexWatcherService) -> FastAPI:
     return app
 
 
-if __name__ == "__main__":
+def main():
+    import argparse
+
     import uvicorn
+
+    parser = argparse.ArgumentParser(description="Plex Watcher API Server")
+    parser.add_argument(
+        "-H",
+        "--host",
+        type=str,
+        default="0.0.0.0",
+        help="Host to run the API server on (default: 0.0.0.0)",
+    )
+    parser.add_argument(
+        "-P",
+        "--port",
+        type=int,
+        default=7799,
+        help="Port to run the API server on (default: 7799)",
+    )
+    args = parser.parse_args()
 
     service = PlexWatcherService()
     app = router(service)
-    uvicorn.run(app, host="0.0.0.0", port=7799)
+    uvicorn.run(app, host=args.host, port=args.port)
+
+
+if __name__ == "__main__":
+    main()
