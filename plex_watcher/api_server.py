@@ -1,4 +1,4 @@
-# GET /status, GET /events, GET /paths
+# GET /status,
 # POST /add_path, POST /start, POST /stop, POST /scan
 # TODO: implement authentication (API key or token)
 
@@ -7,8 +7,16 @@ from typing import List
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 
+from plex_watcher import logger
 from plex_watcher.core.plex_watcher_service import PlexWatcherService
+
+
+class ScanRequest(BaseModel):
+    """Request model for scan endpoint."""
+
+    paths: List[str]
 
 
 def router(service: PlexWatcherService) -> FastAPI:
@@ -40,12 +48,38 @@ def router(service: PlexWatcherService) -> FastAPI:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
+    @app.post("/add_path", description="Add a path to watch")
+    async def add_path(path: str):
+        try:
+            service.add_path(path)
+            logger.info(f"Added path to watch: {path}")
+            return {"status": "success", "message": f"Added path: {path}"}
+        except FileNotFoundError as fnf:
+            logger.error(f"File not found: {fnf}")
+            return {"status": "error", "message": str(fnf)}
+        except Exception as e:
+            logger.error(f"Error adding path: {e}")
+            return {"status": "error", "message": str(e)}
+
+    @app.post("/remove_path", description="Remove a path from watch list")
+    async def remove_path(path: str):
+        try:
+            service.remove_path(path)
+            logger.info(f"Removed path from watch: {path}")
+            return {"status": "success", "message": f"Removed path: {path}"}
+        except ValueError as ve:
+            logger.error(f"Path not found: {ve}")
+            return {"status": "error", "message": str(ve)}
+        except Exception as e:
+            logger.error(f"Error removing path: {e}")
+            return {"status": "error", "message": str(e)}
+
     @app.post("/scan", description="Scan a specific directory")
-    async def scan_directories(paths: List[str]):
-        if not paths:
+    async def scan_directories(request: ScanRequest):
+        if not request.paths:
             raise HTTPException(status_code=400, detail="Path parameter is required.")
         errors = []
-        for path in paths:
+        for path in request.paths:
             try:
                 service.scan_path(path)
             except FileNotFoundError as fnf:
@@ -71,4 +105,4 @@ if __name__ == "__main__":
 
     service = PlexWatcherService()
     app = router(service)
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=7799)

@@ -42,6 +42,14 @@ class PlexWatcherService:
             raise FileNotFoundError(f"Path '{p}' does not exist.")
         self.paths.add(p)
 
+    def remove_path(self, path: str) -> None:
+        """Remove a path from the watch list."""
+        p = Path(path).resolve()
+        if p in self.paths:
+            self.paths.discard(p)
+        else:
+            raise ValueError(f"Path '{p}' is not in the watch list.")
+
     def start(self) -> None:
         with self._lock:
             if not self.server or not self.handler:
