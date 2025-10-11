@@ -4,6 +4,11 @@ on:
   release:
     types: [published]
 
+# Permissions needed for the workflow
+permissions:
+  contents: write  # Required to upload assets to releases
+  packages: write  # Required for Docker image publishing
+
 # Configuration variables - customize these as needed
 env:
   PYTHON_VERSION: '3.11'
