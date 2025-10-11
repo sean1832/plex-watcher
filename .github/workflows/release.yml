@@ -1,0 +1,242 @@
+name: Release and Deploy
+
+on:
+  release:
+    types: [published]
+
+# Configuration variables - customize these as needed
+env:
+  PYTHON_VERSION: '3.11'
+  DOCKER_IMAGE_NAME_BACKEND: 'plex-watcher-backend'
+  DOCKER_IMAGE_NAME_FRONTEND: 'plex-watcher-frontend'
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  BACKEND_DIR: 'backend'
+  FRONTEND_DIR: 'frontend'
+  BACKEND_VERSION_FILE: 'backend/__init__.py'
+  FRONTEND_VERSION_FILE: 'frontend/__init__.py'
+
+jobs:
+  # Job 1: Run tests to ensure everything works
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -e "${{ env.BACKEND_DIR }}[test]"
+          pip install -e "${{ env.FRONTEND_DIR }}"
+      
+      - name: Run pytest
+        run: |
+          pytest tests/ -v --tb=short
+  
+  # Job 2: Update version and build wheels
+  build:
+    name: Build Distribution Packages
+    needs: test
+    runs-on: ubuntu-latest
+    
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      is_prerelease: ${{ steps.get_version.outputs.is_prerelease }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Extract version from release tag
+        id: get_version
+        run: |
+          # Get the tag name (e.g., v1.2.3, v1.2.3-beta.1, v1.2.3-rc.2)
+          TAG_NAME="${{ github.event.release.tag_name }}"
+          echo "Tag name: $TAG_NAME"
+          
+          # Remove 'v' prefix if present
+          VERSION="${TAG_NAME#v}"
+          echo "Parsed version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Check if this is a pre-release (contains -, alpha, beta, rc, dev)
+          if [[ "$VERSION" =~ (alpha|beta|rc|dev|-) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "This is a pre-release version"
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "This is a stable release"
+          fi
+      
+      - name: Update backend version
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          sed -i "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" "${{ env.BACKEND_VERSION_FILE }}"
+          echo "Updated backend version to $VERSION"
+          cat "${{ env.BACKEND_VERSION_FILE }}" | head -n 3
+      
+      - name: Update frontend version
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          sed -i "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" "${{ env.FRONTEND_VERSION_FILE }}"
+          echo "Updated frontend version to $VERSION"
+          cat "${{ env.FRONTEND_VERSION_FILE }}" | head -n 5
+      
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip setuptools wheel build
+      
+      - name: Build backend wheel
+        run: |
+          cd "${{ env.BACKEND_DIR }}"
+          python -m build --wheel
+          echo "Backend wheel built successfully"
+          ls -lh dist/
+      
+      - name: Build frontend wheel
+        run: |
+          cd "${{ env.FRONTEND_DIR }}"
+          python -m build --wheel
+          echo "Frontend wheel built successfully"
+          ls -lh dist/
+      
+      - name: Upload backend wheel as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-wheel
+          path: ${{ env.BACKEND_DIR }}/dist/*.whl
+          retention-days: 7
+      
+      - name: Upload frontend wheel as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-wheel
+          path: ${{ env.FRONTEND_DIR }}/dist/*.whl
+          retention-days: 7
+  
+  # Job 3: Upload wheels to GitHub Release
+  upload-release-assets:
+    name: Upload Assets to Release
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download backend wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-wheel
+          path: ./wheels/backend
+      
+      - name: Download frontend wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-wheel
+          path: ./wheels/frontend
+      
+      - name: Upload backend wheel to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./wheels/backend/*.whl
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Upload frontend wheel to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./wheels/frontend/*.whl
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  
+  # Job 4: Build and push Docker image
+  docker:
+    name: Build and Push Docker Image
+    needs: [build, upload-release-assets]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Extract version
+        id: version
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Update backend version in source
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          sed -i "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" "${{ env.BACKEND_VERSION_FILE }}"
+      
+      - name: Build and tag Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME_BACKEND }}
+          tags: |
+            # Tag with version number
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.version }}
+            # Tag with major.minor
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.version }}
+            # Tag with major
+            type=semver,pattern={{major}},value=${{ steps.version.outputs.version }}
+            # Tag as latest only if not pre-release
+            type=raw,value=latest,enable=${{ needs.build.outputs.is_prerelease == 'false' }}
+            # Tag as beta/rc/alpha if pre-release
+            type=raw,value=beta,enable=${{ contains(steps.version.outputs.version, 'beta') }}
+            type=raw,value=rc,enable=${{ contains(steps.version.outputs.version, 'rc') }}
+            type=raw,value=alpha,enable=${{ contains(steps.version.outputs.version, 'alpha') }}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ env.BACKEND_DIR }}
+          file: ./${{ env.BACKEND_DIR }}/dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+      
+      - name: Docker image summary
+        run: |
+          echo "### Docker Image Published Successfully! 🐳" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Pull command:**" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
