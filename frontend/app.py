@@ -1,154 +1,338 @@
-from dataclasses import dataclass
+"""
+Plex Watcher Frontend Application
 
-import pandas as pd
-import requests
+A Streamlit-based web interface for monitoring and managing the Plex Watcher service.
+This application provides an intuitive UI for configuring paths to watch, starting/stopping
+the monitoring service, and manually triggering scans.
+"""
+
+# TODO: remove path from list
+# TODO: display api error responses messages in UI
+
+import sys
+import time
+from pathlib import Path
+
 import streamlit as st
 
-API_ENDPOINT = "http://localhost:7799"
+# Add project root to Python path to enable 'from frontend...' imports
+# This ensures the app works when run as: streamlit run frontend/app.py
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+from frontend.api_client import get_api_client, run_async  # noqa: E402
+from frontend.components import (  # noqa: E402
+    render_api_response,
+    render_backend_info,
+    render_configuration_form,
+    render_path_manager,
+    render_scan_form,
+    render_settings_sidebar,
+    render_status_indicator,
+    render_watch_controls,
+)
+from frontend.state import (  # noqa: E402
+    get_backend_status,
+    init_session_state,
+    should_fetch_status,
+    update_backend_status,
+    update_config,
+    update_settings,
+)
 
 
-@dataclass
-class BackendStatus:
-    is_connected: bool
-    is_watching: bool
-    paths: list[str]
-    server: str | None
-    cooldown: int
+def fetch_and_update_status(force: bool = False):
+    """
+    Fetch status from backend and update session state.
 
-    def to_dict(self):
-        return {
-            "is_connected": self.is_connected,
-            "is_watching": self.is_watching,
-            "paths": self.paths,
-            "server": self.server,
-            "cooldown": self.cooldown,
+    Uses smart throttling to prevent excessive API calls.
+
+    Args:
+        force: If True, bypass throttling and fetch immediately
+    """
+    # Check if we should fetch (unless forced)
+    if not force and not should_fetch_status():
+        return  # Use cached data
+
+    api_client = get_api_client()
+    status = run_async(api_client.get_status(use_cache=not force))
+    update_backend_status(status)
+
+
+def handle_configuration_submit(config_data: dict):
+    """
+    Handle configuration form submission.
+
+    Args:
+        config_data: Configuration form data
+    """
+    # Config is saved to session state, no API call needed
+    update_config(
+        config_data["server_url"],
+        config_data["token"],
+        config_data["interval"],
+    )
+    st.success("✅ Configuration saved!")
+
+
+def handle_watch_action(action: str):
+    """
+    Handle start/stop watching actions.
+
+    Args:
+        action: "start" or "stop"
+    """
+    api_client = get_api_client()
+
+    if action == "start":
+        # Get current config from session state
+        server_url = st.session_state.plex_server_url
+        token = st.session_state.plex_token
+        interval = st.session_state.poll_interval
+
+        # Validate configuration
+        if not server_url or not token:
+            st.error("Please configure Plex server URL and token first!")
+            return
+
+        with st.spinner("Starting watcher..."):
+            response = run_async(api_client.start_watching(server_url, token, interval))
+            render_api_response(response)
+
+            # Refresh status after operation
+            if response.is_success:
+                time.sleep(0.5)  # Brief delay for backend to update
+                fetch_and_update_status(force=True)
+
+    elif action == "stop":
+        with st.spinner("Stopping watcher..."):
+            response = run_async(api_client.stop_watching())
+            render_api_response(response)
+
+            # Refresh status after operation
+            if response.is_success:
+                time.sleep(0.5)  # Brief delay for backend to update
+                fetch_and_update_status(force=True)
+
+
+def handle_path_action(path_action: dict):
+    """
+    Handle adding or removing a path.
+
+    Args:
+        path_action: Path action dictionary with 'action' and 'path' keys
+    """
+    if not path_action:
+        return
+
+    api_client = get_api_client()
+    action = path_action.get("action")
+    path = path_action.get("path")
+
+    if not path:
+        st.error("Path is required")
+        return
+
+    if action == "add":
+        with st.spinner(f"Adding path: {path}"):
+            response = run_async(api_client.add_path(path))
+            render_api_response(response)
+
+            # Refresh status after operation
+            if response.is_success:
+                time.sleep(0.5)  # Brief delay for backend to update
+                fetch_and_update_status(force=True)
+
+    elif action == "remove":
+        with st.spinner(f"Removing path: {path}"):
+            response = run_async(api_client.remove_path(path))
+            render_api_response(response)
+
+            # Refresh status after operation
+            if response.is_success:
+                time.sleep(0.5)  # Brief delay for backend to update
+                fetch_and_update_status(force=True)
+
+
+def handle_scan_request(scan_data: dict):
+    """
+    Handle manual scan request.
+
+    Args:
+        scan_data: Scan form data
+    """
+    if scan_data:
+        api_client = get_api_client()
+        paths = scan_data["paths"]
+
+        with st.spinner(f"Scanning {len(paths)} path(s)..."):
+            response = run_async(api_client.scan_paths(paths))
+            render_api_response(response)
+
+
+def render_watch_tab():
+    """Render the Watch tab content."""
+
+    # Configuration form (doesn't trigger rerun)
+    config_data = render_configuration_form()
+    if config_data["submitted"]:
+        handle_configuration_submit(config_data)
+        # No rerun needed - config saved to session state
+
+    st.divider()
+    # Path management (triggers rerun on action)
+    status = get_backend_status()
+    path_action = render_path_manager(status)
+    if path_action:
+        handle_path_action(path_action)
+        st.rerun()  # Rerun to show updated paths
+
+    # Watch controls (triggers rerun on action)
+    st.subheader("Control")
+    action = render_watch_controls(status.is_watching, status.is_connected)
+    if action:
+        handle_watch_action(action)
+        st.rerun()  # Rerun to show updated status
+
+
+def render_scan_tab():
+    """Render the Scan tab content."""
+    st.header("🔍 Manual Scan")
+
+    scan_data = render_scan_form()
+    if scan_data:
+        handle_scan_request(scan_data)
+
+
+def handle_connection_action(action: dict):
+    """
+    Handle connection test and reconnect actions.
+
+    Args:
+        action: Dictionary with action type and endpoint
+    """
+    if not action:
+        return
+
+    action_type = action.get("type")
+    endpoint = action.get("endpoint", "").strip()
+
+    if not endpoint:
+        st.session_state.last_connection_test = {
+            "success": False,
+            "message": "❌ Please enter a valid endpoint URL",
         }
+        return
 
-    @classmethod
-    def from_dict(cls, data: dict):
-        return cls(
-            is_connected=True,
-            is_watching=data.get("is_watching", False),
-            paths=data.get("paths", []),
-            server=data.get("server"),
-            cooldown=data.get("cooldown", 0),
-        )
+    api_client = get_api_client()
 
+    if action_type == "test_connection":
+        # Test connection without saving
+        with st.spinner(f"Testing connection to {endpoint}..."):
+            success, message = run_async(api_client.test_connection(endpoint))
+            st.session_state.last_connection_test = {
+                "success": success,
+                "message": message,
+            }
 
-def start():
-    response = requests.post(
-        f"{API_ENDPOINT}/start",
-        params={
-            "server_url": st.session_state.plex_url,
-            "token": st.session_state.plex_token,
-            "interval": st.session_state.poll_interval,
-        },
-    )
-    if response.status_code == 200:
-        return response.json()
-    return {"error": "Unable to start watching"}
+    elif action_type == "reconnect":
+        # Test connection and save if successful
+        with st.spinner(f"Testing connection to {endpoint}..."):
+            success, message = run_async(api_client.test_connection(endpoint))
 
+            if success:
+                # Update the API client endpoint
+                api_client.update_endpoint(endpoint)
 
-def stop():
-    response = requests.post(f"{API_ENDPOINT}/stop")
-    if response.status_code == 200:
-        return response.json()
-    return {"error": "Unable to stop watching"}
+                # Update session state
+                st.session_state.api_endpoint = endpoint
 
+                # Update .env file
+                from frontend.config import update_env_file
 
-def scan(paths):
-    response = requests.post(f"{API_ENDPOINT}/scan", json={"paths": paths})
-    if response.status_code == 200:
-        return response.json()
-    return {"error": "Unable to scan paths"}
-
-
-def get_status() -> BackendStatus | dict[str, str]:
-    # get status from backend API
-    try:
-        response = requests.get(f"{API_ENDPOINT}/status", timeout=2)
-        if response.status_code == 200:
-            return BackendStatus.from_dict(response.json())
-        return {"error": "Unable to fetch status"}
-    except requests.ConnectionError:
-        return {"error": f"Unable to connect to backend API endpoint {API_ENDPOINT}/status"}
-    except requests.Timeout:
-        return {"error": "Request timed out"}
-    except requests.RequestException as e:
-        return {"error": str(e)}
-
-
-def display_basic_params():
-    st.text_input("Plex Server URL", placeholder="http://localhost:32400")
-    st.text_input("Plex Token", type="password", placeholder="Your Plex Token")
-    st.number_input("Polling Interval (seconds)", min_value=1, value=10)
-
-
-def display_watchlist():
-    st.text("Watchlist")
-    df = pd.DataFrame(
-        [
-            {"Absolute Path": "/media/movies", "Watch": False},  # todo: mockup
-            {"Absolute Path": "/media/tv", "Watch": False},  # todo: mockup
-        ]
-    )
-
-    edited_df = st.data_editor(df, num_rows="dynamic", width="stretch")
-
-
-def display_start_stop_buttons():
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Start Watching", width="stretch"):
-            start()
-
-    with col2:
-        if st.button("Stop Watching", width="stretch"):
-            stop()
-
-
-def display_status(status: BackendStatus):
-    if status.is_watching:
-        st.text("🟢 Watching")
-    else:
-        st.text("🔴 Stopped")
-
-
-def watch_tab(tab):
-    with tab:
-        display_basic_params()
-        display_watchlist()
-        display_start_stop_buttons()
-
-
-def scan_tab(tab):
-    with tab:
-        st.text("Scan Specific Directories")
-        paths = st.text_area("Enter paths to scan, one per line").splitlines()
-        if st.button("Scan", width="stretch"):
-            result = scan(paths)
-            if result.get("status") == "success":
-                st.success(result.get("message"))
+                if update_env_file("API_ENDPOINT", endpoint):
+                    st.session_state.last_connection_test = {
+                        "success": True,
+                        "message": f"✅ Connected and saved to .env: {endpoint}",
+                    }
+                    # Force status refresh
+                    fetch_and_update_status(force=True)
+                else:
+                    st.session_state.last_connection_test = {
+                        "success": True,
+                        "message": f"✅ Connected (but failed to save to .env): {endpoint}",
+                    }
             else:
-                st.error(result.get("message"))
-                if "details" in result:
-                    for detail in result["details"]:
-                        st.write(f"- {detail}")
+                st.session_state.last_connection_test = {
+                    "success": False,
+                    "message": message,
+                }
+
+
+def main():
+    """Main application entry point."""
+    # Page configuration
+    st.set_page_config(
+        page_title="Plex Watcher",
+        page_icon="📺",
+        layout="centered",
+        initial_sidebar_state="auto",
+    )
+
+    # Initialize session state
+    init_session_state()
+
+    # Fetch status FIRST (before sidebar) so connection indicator is accurate
+    # Use smart throttling - only fetches when needed
+    fetch_and_update_status()
+
+    # Render settings sidebar and get settings/actions
+    settings = render_settings_sidebar()
+
+    # Handle connection actions first (test/reconnect)
+    if settings.get("action"):
+        handle_connection_action(settings["action"])
+        st.rerun()  # Rerun to show updated status
+
+    # Update other settings
+    update_settings(settings)
+
+    # Main header
+    st.title("📺 Plex Watcher")
+    st.markdown("Monitor your Plex server for new content automatically.")
+
+    # Get status for display (already fetched above)
+    status = get_backend_status()
+
+    # Status indicator
+    render_status_indicator(status)
+
+    # Backend info (collapsible)
+    if status.is_connected:
+        render_backend_info(status)
+
+    # Tabs for different sections
+    tab1, tab2 = st.tabs(["⚙️ Watch", "🔍 Scan"])
+
+    with tab1:
+        render_watch_tab()
+
+    with tab2:
+        render_scan_tab()
+
+    # Auto-refresh logic
+    if settings["auto_refresh_enabled"]:
+        st.caption(f"🔄 Auto-refreshing every {settings['refresh_interval']} seconds...")
+        time.sleep(settings["refresh_interval"])
+        st.rerun()
+    else:
+        # Manual refresh button at bottom
+        st.divider()
+        if st.button("🔄 Refresh Status", width="stretch"):
+            fetch_and_update_status(force=True)
+            st.rerun()
 
 
 if __name__ == "__main__":
-    st.set_page_config(page_title="Plex Watcher", page_icon="📺", layout="centered")
-    st.title("📺 Plex Watcher")
-    st.markdown("Monitor your Plex server for new content automatically.")
-    status = get_status()
-    if isinstance(status, dict) and "error" in status:
-        st.error(status["error"])
-    elif isinstance(status, BackendStatus):
-        if not status.is_connected:
-            st.warning("Not connected to Plex Watcher backend")
-        display_status(status)
-    tab1, tab2 = st.tabs(["Watch", "Scan"])
-    watch_tab(tab1)
-    scan_tab(tab2)
-    if st.button("Refresh", width="stretch"):
-        st.rerun()
+    main()
