@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
@@ -31,6 +32,20 @@ class ScanRequest(BaseModel):
 
 def router(service: PlexWatcherService) -> FastAPI:
     app = FastAPI(title="Plex Watcher API")
+
+    # Configure CORS for frontend communication
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:5173",  # Vite dev server
+            "http://localhost:4173",  # Vite preview server
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:4173",
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
+        allow_headers=["*"],  # Allow all headers
+    )
 
     @app.get("/")
     async def root():
