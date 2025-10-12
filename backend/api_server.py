@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from plexapi.server import PlexServer
 
 from backend import logger
 from backend.core.plex_watcher_service import PlexWatcherService
@@ -55,6 +56,16 @@ def router(service: PlexWatcherService) -> FastAPI:
     @app.get("/status", description="Get current status of the Plex Watcher")
     async def get_status():
         return service.get_status()
+    
+    @app.get("/plex_test", description="Test connection to Plex server")
+    async def test_plex_connection(server_url: str, token: str) -> bool:
+        try:
+            plex = PlexServer(server_url, token)
+            plex.account()  # Test connection
+            return True
+        except Exception as e:
+            logger.error(f"Failed to connect to Plex server: {e}")
+            return False
 
     @app.post("/start", description="Configure and start the watcher")
     async def start_watcher(request: StartRequest):
