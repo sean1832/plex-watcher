@@ -46,7 +46,93 @@ class TestPlexWatcherService:
         assert service.cooldown == 60
         assert service.scanner is not None
         assert service.handler is not None
-        assert service.is_watching is False
+
+    def test_update_configuration_valid(self, mock_plex_server, temp_dir):
+        """Test updating configuration with valid paths."""
+        service = PlexWatcherService()
+        test_path1 = temp_dir / "movies"
+        test_path2 = temp_dir / "tv"
+        test_path1.mkdir()
+        test_path2.mkdir()
+
+        with patch("backend.core.plex_watcher_service.PlexServer", return_value=mock_plex_server):
+            with patch("backend.core.plex_watcher_service.PlexScanner"):
+                with patch("backend.core.plex_watcher_service.PlexWatcherHandler"):
+                    service.update_configuration(
+                        server_url="http://localhost:32400",
+                        token="test_token",
+                        paths=[str(test_path1), str(test_path2)],
+                        cooldown=45,
+                    )
+
+        assert service.server is not None
+        assert service.cooldown == 45
+        assert service.scanner is not None
+        assert service.handler is not None
+        assert len(service.paths) == 2
+
+    def test_update_configuration_replaces_paths(self, mock_plex_server, temp_dir):
+        """Test that update_configuration replaces existing paths."""
+        service = PlexWatcherService()
+        old_path = temp_dir / "old"
+        new_path = temp_dir / "new"
+        old_path.mkdir()
+        new_path.mkdir()
+
+        # Add initial path
+        service.add_path(str(old_path))
+        assert len(service.paths) == 1
+
+        # Update configuration with new path
+        with patch("backend.core.plex_watcher_service.PlexServer", return_value=mock_plex_server):
+            with patch("backend.core.plex_watcher_service.PlexScanner"):
+                with patch("backend.core.plex_watcher_service.PlexWatcherHandler"):
+                    service.update_configuration(
+                        server_url="http://localhost:32400",
+                        token="test_token",
+                        paths=[str(new_path)],
+                        cooldown=30,
+                    )
+
+        # Old path should be gone, only new path remains
+        assert len(service.paths) == 1
+        assert new_path in service.paths
+        assert old_path not in service.paths
+
+    def test_update_configuration_invalid_path(self, mock_plex_server):
+        """Test update_configuration with non-existent path fails fast."""
+        service = PlexWatcherService()
+
+        with patch("backend.core.plex_watcher_service.PlexServer", return_value=mock_plex_server):
+            with pytest.raises(FileNotFoundError):
+                service.update_configuration(
+                    server_url="http://localhost:32400",
+                    token="test_token",
+                    paths=["/nonexistent/path"],
+                    cooldown=30,
+                )
+
+        # Service should not be partially configured
+        assert service.scanner is None
+        assert len(service.paths) == 0
+
+    def test_update_configuration_partial_invalid_paths(self, mock_plex_server, temp_dir):
+        """Test update_configuration with some invalid paths fails atomically."""
+        service = PlexWatcherService()
+        valid_path = temp_dir / "valid"
+        valid_path.mkdir()
+
+        with patch("backend.core.plex_watcher_service.PlexServer", return_value=mock_plex_server):
+            with pytest.raises(FileNotFoundError):
+                service.update_configuration(
+                    server_url="http://localhost:32400",
+                    token="test_token",
+                    paths=[str(valid_path), "/nonexistent/path"],
+                    cooldown=30,
+                )
+
+        # No paths should be added due to atomic validation
+        assert len(service.paths) == 0
 
     def test_add_path_valid(self, temp_dir):
         """Test adding a valid path."""
