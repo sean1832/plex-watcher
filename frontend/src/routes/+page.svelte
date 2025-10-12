@@ -53,58 +53,40 @@
 
 	// Load initial status from backend
 	onMount(async () => {
-		// Check if we need to refresh (first load or URL changed)
-		const needsRefresh = config.backendStatus === 'unknown' || config.hasBackendUrlChanged();
-		
-		if (!needsRefresh) {
-			// Use cached status - only if it's a valid known state
-			backendStatus = config.backendStatus === 'unknown' ? 'offline' : config.backendStatus;
-			plexStatus = config.plexStatus === 'unknown' ? 'offline' : config.plexStatus;
-			watchStatus = config.isWatching ? 'watching' : 'stopped';
-			
-			// Update paths from cached config
-			if (config.watchedPaths.length > 0) {
-				paths = config.watchedPaths.map(dir => ({
-					id: crypto.randomUUID(),
-					directory: dir,
-					enabled: true
-				}));
-			}
-			
-			console.log('Using cached connection status:', backendStatus);
-			return; // Skip API call
-		}
-		
-		// Need to refresh - set connecting state
+		isRefreshing = true;
 		backendStatus = 'connecting';
 		plexStatus = 'connecting';
-		
+		errorMessage = null;
+
 		try {
-			const backendStatusResp = await config.loadFromBackend();
-			const plexStatusResp = await config.testPlex();
-			if (plexStatusResp == 'online' || plexStatusResp == 'offline') {
-				plexStatus = plexStatusResp;
-			} else {
-				plexStatus = config.plexStatus === 'unknown' ? 'offline' : config.plexStatus;
-			}
-			
+			// Fetch backend status (including paths and watch status)
+			const backendStatusResp = await config.loadFromBackend(true); // Force refresh
 			if (backendStatusResp) {
 				backendStatus = 'online';
 				watchStatus = backendStatusResp.is_watching ? 'watching' : 'stopped';
-				
-				// Update paths from backend
 				paths = backendStatusResp.paths.map(dir => ({
 					id: crypto.randomUUID(),
 					directory: dir,
 					enabled: true
 				}));
 			} else {
+				// Fallback to stored status if API fails but was previously known
 				backendStatus = config.backendStatus === 'unknown' ? 'offline' : config.backendStatus;
 			}
+
+			// Independently fetch Plex status
+			const plexStatusResp = await config.testPlex();
+			plexStatus = plexStatusResp;
+
 		} catch (error) {
 			console.error('Failed to load initial status:', error);
 			backendStatus = 'offline';
-			config.backendStatus = 'offline';
+			plexStatus = 'offline';
+			config.backendStatus = 'offline'; // Persist offline status
+			config.plexStatus = 'offline';
+			errorMessage = 'Failed to connect to services. Please check your configuration.';
+		} finally {
+			isRefreshing = false;
 		}
 	});
 
