@@ -20,7 +20,7 @@
  */
 
 import { configureApiClient } from '$lib/api/client';
-import { getStatus } from '$lib/api/endpoints';
+import { getStatus, testPlexConnection } from '$lib/api/endpoints';
 import type { StatusResponse } from '$lib/types/requests';
 
 interface ConfigState {
@@ -40,7 +40,8 @@ interface ConfigState {
 	lastSync: Date | null;
 
 	// Connection cache (not persisted)
-	connectionStatus: 'online' | 'offline' | 'unknown';
+	backendStatus: 'online' | 'offline' | 'unknown';
+	plexStatus: 'online' | 'offline' | 'unknown';
 	lastBackendUrl: string | null;
 }
 
@@ -52,7 +53,8 @@ const DEFAULT_CONFIG: ConfigState = {
 	watchedPaths: [],
 	isWatching: false,
 	lastSync: null,
-	connectionStatus: 'unknown',
+	backendStatus: 'unknown',
+	plexStatus: 'unknown',
 	lastBackendUrl: null
 };
 
@@ -135,8 +137,8 @@ function createConfigStore() {
 		get lastSync() {
 			return state.lastSync;
 		},
-		get connectionStatus() {
-			return state.connectionStatus;
+		get backendStatus() {
+			return state.backendStatus;
 		},
 
 		// Reactive setters (with auto-persistence)
@@ -176,8 +178,12 @@ function createConfigStore() {
 			// Don't persist runtime state
 		},
 
-		set connectionStatus(value: 'online' | 'offline' | 'unknown') {
-			state.connectionStatus = value;
+		set backendStatus(value: 'online' | 'offline' | 'unknown') {
+			state.backendStatus = value;
+			// Don't persist runtime state
+		},
+		set plexStatus(value: 'online' | 'offline' | 'unknown') {
+			state.plexStatus = value;
 			// Don't persist runtime state
 		},
 
@@ -196,7 +202,7 @@ function createConfigStore() {
 		 */
 		async loadFromBackend(force = false): Promise<StatusResponse | null> {
 			// Skip if we have a cached connection and URL hasn't changed
-			if (!force && state.connectionStatus === 'online' && !this.hasBackendUrlChanged()) {
+			if (!force && state.backendStatus === 'online' && !this.hasBackendUrlChanged()) {
 				console.log('Using cached connection status');
 				return null;
 			}
@@ -207,21 +213,40 @@ function createConfigStore() {
 				// Update local state
 				state.isWatching = status.is_watching;
 				state.watchedPaths = status.paths;
-				state.plexServerUrl = status.server || state.plexServerUrl;
-				state.cooldownInterval = status.cooldown || state.cooldownInterval;
+
+				// Only update Plex settings from backend if watcher is running
+				// Otherwise, trust localStorage values (user may have just saved settings)
+				if (status.is_watching) {
+					state.plexServerUrl = status.server || state.plexServerUrl;
+					state.cooldownInterval = status.cooldown || state.cooldownInterval;
+				}
+
 				state.lastSync = new Date();
-				state.connectionStatus = 'online';
+				state.backendStatus = 'online';
 				state.lastBackendUrl = state.backendUrl;
 
-				// Persist updated paths
+				// Persist updated paths (but not Plex settings unless watching)
 				saveToStorage(state);
 
 				return status;
 			} catch (error) {
 				console.error('Failed to load config from backend:', error);
-				state.connectionStatus = 'offline';
+				state.backendStatus = 'offline';
 				state.lastBackendUrl = state.backendUrl;
 				return null;
+			}
+		},
+
+		async testPlex(): Promise<'online' | 'offline'> {
+			try {
+				const isOk = await testPlexConnection(state.plexServerUrl, state.plexToken);
+				if (!isOk) throw new Error('Plex test returned false');
+				state.plexStatus = 'online';
+				return state.plexStatus;
+			} catch (error) {
+				console.error('Plex connection test failed:', error);
+				state.plexStatus = 'offline';
+				return state.plexStatus;
 			}
 		},
 

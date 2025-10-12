@@ -8,46 +8,84 @@
 	import Button from './ui/button/button.svelte';
 
   interface Props {
-    connectionStatus: 'online' | 'offline' | 'connecting';
+    backendState: 'online' | 'offline' | 'connecting';
+    plexState?: 'online' | 'offline' | 'connecting';
     watchStatus: 'watching' | 'stopped' | 'error';
-    onRefresh?: () => void | Promise<void>;
+    onRefreshBackend?: () => void | Promise<void>;
+    onRefreshPlex?: () => void | Promise<void>;
   }
-  let { connectionStatus = 'offline', watchStatus = 'stopped', onRefresh }: Props = $props();
+  let { backendState = 'offline', plexState = 'offline', watchStatus = 'stopped', onRefreshBackend, onRefreshPlex }: Props = $props();
   
-  let isRefreshing = $state(false);
+  let isRefreshingBackend = $state(false);
+  let isRefreshingPlex = $state(false);
   
-  async function handleRefresh() {
-    if (!onRefresh || isRefreshing) return;
+  async function handleRefreshBackend() {
+    if (!onRefreshBackend || isRefreshingBackend) return;
     
-    isRefreshing = true;
+    isRefreshingBackend = true;
     try {
-      await onRefresh();
+      await onRefreshBackend();
     } finally {
-      isRefreshing = false;
+      isRefreshingBackend = false;
+    }
+  }
+
+  async function handleRefreshPlex() {
+    if (!onRefreshPlex || isRefreshingPlex) return;
+    
+    isRefreshingPlex = true;
+    try {
+      await onRefreshPlex();
+    } finally {
+      isRefreshingPlex = false;
     }
   }
 </script>
 
 <div class="flex items-center text-sm">
-  <!--Server Connection-->
-  <Button variant="ghost" class="p-2 hover:bg-accent" onclick={handleRefresh} disabled={isRefreshing || connectionStatus === 'connecting'}>
-    {#if connectionStatus === 'online'}
+  <!--API Backend Connection-->
+  <Button variant="ghost" class="p-2 hover:bg-accent" onclick={handleRefreshBackend} disabled={isRefreshingBackend || backendState === 'connecting'}>
+    {#if backendState === 'online'}
       <div class="flex items-center">
         <CircleCheckIcon class="inline h-5 w-5 text-green-600 mr-1" />
-        <span class="text-green-600 font-semibold">Server Online</span>
+        <span class="text-green-600 font-semibold">Backend Online</span>
       </div>
-    {:else if connectionStatus === 'offline'}
+    {:else if backendState === 'offline'}
       <div class="flex items-center">
         <CircleXIcon class="inline h-5 w-5 text-destructive mr-1" />
-        <span class="text-destructive font-semibold">Server Offline</span>
+        <span class="text-destructive font-semibold">Backend Offline</span>
       </div>
-    {:else if connectionStatus === 'connecting'}
+    {:else if backendState === 'connecting'}
       <div class="flex items-center">
         <Loader2Icon class="inline h-5 w-5 text-yellow-600 mr-1 animate-spin" />
         <span class="text-yellow-600 font-semibold">Connecting...</span>
       </div>
     {/if}
   </Button>
+
+  <!--Vertical Divider-->
+  <div class="my-2 border-l h-6 mx-4"></div>
+
+  <!--Plex Server Connection-->
+  <Button variant="ghost" class="p-2 hover:bg-accent" onclick={handleRefreshPlex} disabled={isRefreshingPlex || plexState === 'connecting'}>
+    {#if plexState === 'online'}
+      <div class="flex items-center">
+        <CircleCheckIcon class="inline h-5 w-5 text-green-600 mr-1" />
+        <span class="text-green-600 font-semibold">Plex Online</span>
+      </div>
+    {:else if plexState === 'offline'}
+      <div class="flex items-center">
+        <CircleXIcon class="inline h-5 w-5 text-destructive mr-1" />
+        <span class="text-destructive font-semibold">Plex Offline</span>
+      </div>
+    {:else if plexState === 'connecting'}
+      <div class="flex items-center">
+        <Loader2Icon class="inline h-5 w-5 text-yellow-600 mr-1 animate-spin" />
+        <span class="text-yellow-600 font-semibold">Connecting...</span>
+      </div>
+    {/if}
+  </Button>
+
 
   <!--Vertical Divider-->
   <div class="my-2 border-l h-6 mx-4"></div>

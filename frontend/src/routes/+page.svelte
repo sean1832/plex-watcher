@@ -37,8 +37,11 @@
 		paths = updatedPaths;
 	}
 
-	let connectionStatus = $state<'online' | 'offline' | 'connecting'>(
-		config.connectionStatus === 'unknown' ? 'connecting' : config.connectionStatus
+	let backendStatus = $state<'online' | 'offline' | 'connecting'>(
+		config.backendStatus === 'unknown' ? 'connecting' : config.backendStatus
+	);
+	let plexStatus = $state<'online' | 'offline' | 'connecting'>(
+		config.plexStatus === 'unknown' ? 'connecting' : config.plexStatus
 	);
 	let watchStatus = $state<'stopped' | 'watching' | 'error'>(
 		config.isWatching ? 'watching' : 'stopped'
@@ -51,11 +54,12 @@
 	// Load initial status from backend
 	onMount(async () => {
 		// Check if we need to refresh (first load or URL changed)
-		const needsRefresh = config.connectionStatus === 'unknown' || config.hasBackendUrlChanged();
+		const needsRefresh = config.backendStatus === 'unknown' || config.hasBackendUrlChanged();
 		
 		if (!needsRefresh) {
 			// Use cached status - only if it's a valid known state
-			connectionStatus = config.connectionStatus === 'unknown' ? 'offline' : config.connectionStatus;
+			backendStatus = config.backendStatus === 'unknown' ? 'offline' : config.backendStatus;
+			plexStatus = config.plexStatus === 'unknown' ? 'offline' : config.plexStatus;
 			watchStatus = config.isWatching ? 'watching' : 'stopped';
 			
 			// Update paths from cached config
@@ -67,33 +71,40 @@
 				}));
 			}
 			
-			console.log('Using cached connection status:', connectionStatus);
+			console.log('Using cached connection status:', backendStatus);
 			return; // Skip API call
 		}
 		
 		// Need to refresh - set connecting state
-		connectionStatus = 'connecting';
+		backendStatus = 'connecting';
+		plexStatus = 'connecting';
 		
 		try {
-			const status = await config.loadFromBackend();
+			const backendStatusResp = await config.loadFromBackend();
+			const plexStatusResp = await config.testPlex();
+			if (plexStatusResp == 'online' || plexStatusResp == 'offline') {
+				plexStatus = plexStatusResp;
+			} else {
+				plexStatus = config.plexStatus === 'unknown' ? 'offline' : config.plexStatus;
+			}
 			
-			if (status) {
-				connectionStatus = 'online';
-				watchStatus = status.is_watching ? 'watching' : 'stopped';
+			if (backendStatusResp) {
+				backendStatus = 'online';
+				watchStatus = backendStatusResp.is_watching ? 'watching' : 'stopped';
 				
 				// Update paths from backend
-				paths = status.paths.map(dir => ({
+				paths = backendStatusResp.paths.map(dir => ({
 					id: crypto.randomUUID(),
 					directory: dir,
 					enabled: true
 				}));
 			} else {
-				connectionStatus = config.connectionStatus === 'unknown' ? 'offline' : config.connectionStatus;
+				backendStatus = config.backendStatus === 'unknown' ? 'offline' : config.backendStatus;
 			}
 		} catch (error) {
 			console.error('Failed to load initial status:', error);
-			connectionStatus = 'offline';
-			config.connectionStatus = 'offline';
+			backendStatus = 'offline';
+			config.backendStatus = 'offline';
 		}
 	});
 
@@ -127,7 +138,7 @@
 			
 			if (response.status === 'success') {
 				watchStatus = 'watching';
-				connectionStatus = 'online';
+				backendStatus = 'online';
 				
 				// Force reload status to ensure sync
 				await config.loadFromBackend(true);
@@ -142,7 +153,7 @@
 				errorMessage = error.message;
 				
 				if (error.statusCode === 0) {
-					connectionStatus = 'offline';
+					backendStatus = 'offline';
 				}
 			} else {
 				errorMessage = 'Failed to start watcher. Please check your configuration.';
@@ -177,7 +188,7 @@
 				errorMessage = error.message;
 				
 				if (error.statusCode === 0) {
-					connectionStatus = 'offline';
+					backendStatus = 'offline';
 				}
 			} else {
 				errorMessage = 'Failed to stop watcher.';
@@ -189,11 +200,11 @@
 		}
 	}
 
-	async function refreshStatus() {
+	async function refreshBackendStatus() {
 		if (isRefreshing) return; // Prevent double-refresh
 		
 		isRefreshing = true;
-		connectionStatus = 'connecting';
+		backendStatus = 'connecting';
 		errorMessage = null;
 		
 		try {
@@ -201,7 +212,7 @@
 			const status = await config.loadFromBackend(true);
 			
 			if (status) {
-				connectionStatus = 'online';
+				backendStatus = 'online';
 				watchStatus = status.is_watching ? 'watching' : 'stopped';
 				
 				// Update paths from backend
@@ -210,16 +221,37 @@
 					directory: dir,
 					enabled: true
 				}));
-				
-				console.log('Status refreshed successfully');
+				console.log('Backend status refreshed successfully');
 			} else {
-				connectionStatus = config.connectionStatus === 'unknown' ? 'offline' : config.connectionStatus;
+				backendStatus = config.backendStatus === 'unknown' ? 'offline' : config.backendStatus;
 			}
 		} catch (error) {
-			console.error('Failed to refresh status:', error);
-			connectionStatus = 'offline';
-			config.connectionStatus = 'offline';
-			errorMessage = 'Failed to refresh status. Please check your connection.';
+			console.error('Failed to refresh backend status:', error);
+			backendStatus = 'offline';
+			config.backendStatus = 'offline';
+			errorMessage = 'Failed to refresh backend status. Please check your connection.';
+		} finally {
+			isRefreshing = false;
+		}
+	}
+
+	async function refreshPlexStatus() {
+		if (isRefreshing) return; // Prevent double-refresh
+		
+		isRefreshing = true;
+		plexStatus = 'connecting';
+		errorMessage = null;
+		
+		try {
+			// Test Plex connection status
+			const plexStatusResp = await config.testPlex();
+			plexStatus = plexStatusResp;
+			console.log('Plex status refreshed successfully:', plexStatusResp);
+		} catch (error) {
+			console.error('Failed to refresh Plex status:', error);
+			plexStatus = 'offline';
+			config.plexStatus = 'offline';
+			errorMessage = 'Failed to refresh Plex status. Please check your connection.';
 		} finally {
 			isRefreshing = false;
 		}
@@ -228,15 +260,16 @@
 	let disableStart = $derived(
 		isStarting ||
 		watchStatus === 'watching' ||
-		connectionStatus !== 'online' ||
+		backendStatus !== 'online' ||
 		paths.filter(p => p.enabled).length === 0
 	);
 	
 	let disableStop = $derived(
 		isStopping ||
 		watchStatus !== 'watching' ||
-		connectionStatus !== 'online'
+		backendStatus !== 'online'
 	);
+
 </script>
 
 
@@ -261,8 +294,10 @@
 					<!-- Status -->
 					<StatusIndicator 
 						watchStatus={watchStatus} 
-						connectionStatus={connectionStatus} 
-						onRefresh={refreshStatus}
+						plexState={plexStatus}
+						backendState={backendStatus} 
+						onRefreshBackend={refreshBackendStatus}
+						onRefreshPlex={refreshPlexStatus}
 					/>
 				</div>
 			</div>
