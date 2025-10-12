@@ -69,30 +69,56 @@ class PlexWatcherService:
         }
 
     def configure(self, server_url: str, token: str, interval: int) -> None:
+        """Configure scanner and handler with Plex server credentials."""
         self.server = PlexServer(baseurl=server_url, token=token)
         self.cooldown = interval
         self.scanner = PlexScanner(plex=self.server)
         self.handler = PlexWatcherHandler(self.scanner, self.observer, cooldown=self.cooldown)
-        self.is_watching = False
         logger.info(
             f"Plex Watcher Service configured. Plex Server: {self.server._baseurl}, Cooldown: {self.cooldown}s"
         )
 
-    def add_path(self, path: str) -> None:
-        p = Path(self._MEDIA_ROOT, path).resolve()
-        if not p.exists():
-            raise FileNotFoundError(f"Path '{p}' does not exist.")
-        self.paths.add(p)
-        logger.info(f"Added path to watch list: {p}")
-
-    def remove_path(self, path: str) -> None:
-        """Remove a path from the watch list."""
-        p = Path(self._MEDIA_ROOT, path).resolve()
-        if p in self.paths:
-            self.paths.discard(p)
-            logger.info(f"Removed path from watch list: {p}")
-        else:
-            raise ValueError(f"Path '{p}' is not in the watch list.")
+    def update_configuration(
+        self, server_url: str, token: str, paths: list[str], cooldown: int
+    ) -> None:
+        """
+        Update complete configuration atomically.
+        
+        It accepts the full configuration and applies all
+        changes at once, ensuring consistency.
+        
+        Args:
+            server_url: Plex server URL
+            token: Plex authentication token
+            paths: List of paths to watch (will replace existing paths)
+            cooldown: Debounce cooldown in seconds
+            
+        Raises:
+            FileNotFoundError: If any path doesn't exist
+        """
+        # Validate all paths first (fail fast before changing state)
+        validated_paths = set()
+        for path in paths:
+            p = Path(self._MEDIA_ROOT, path).resolve()
+            if not p.exists():
+                raise FileNotFoundError(f"Path '{p}' does not exist.")
+            validated_paths.add(p)
+        
+        # Configure server and scanner
+        self.server = PlexServer(baseurl=server_url, token=token)
+        self.cooldown = cooldown
+        self.scanner = PlexScanner(plex=self.server)
+        
+        # Update handler with new cooldown (create new handler to avoid timer issues)
+        self.handler = PlexWatcherHandler(self.scanner, self.observer, cooldown=self.cooldown)
+        
+        # Replace paths atomically
+        self.paths = validated_paths
+        
+        logger.info(
+            f"Configuration updated: Server={self.server._baseurl}, "
+            f"Paths={len(self.paths)}, Cooldown={self.cooldown}s"
+        )
 
     def start(self) -> None:
         with self._lock:
@@ -127,6 +153,7 @@ class PlexWatcherService:
             logger.info("Plex Watcher stopped.")
 
     def restart(self) -> None:
+        """Restart the watcher with the current configuration."""
         self.stop()
         self.start()
 
