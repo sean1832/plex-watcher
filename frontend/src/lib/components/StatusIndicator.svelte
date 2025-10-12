@@ -5,17 +5,32 @@
   import AlertTriangleIcon from '@lucide/svelte/icons/alert-triangle';
   import CircleDotIcon from '@lucide/svelte/icons/circle-dot';
   import CircleIcon from '@lucide/svelte/icons/circle';
+	import Button from './ui/button/button.svelte';
 
   interface Props {
     connectionStatus: 'online' | 'offline' | 'connecting';
     watchStatus: 'watching' | 'stopped' | 'error';
+    onRefresh?: () => void | Promise<void>;
   }
-  let { connectionStatus = 'offline', watchStatus = 'stopped' }: Props = $props();
+  let { connectionStatus = 'offline', watchStatus = 'stopped', onRefresh }: Props = $props();
+  
+  let isRefreshing = $state(false);
+  
+  async function handleRefresh() {
+    if (!onRefresh || isRefreshing) return;
+    
+    isRefreshing = true;
+    try {
+      await onRefresh();
+    } finally {
+      isRefreshing = false;
+    }
+  }
 </script>
 
 <div class="flex items-center text-sm">
   <!--Server Connection-->
-  <div>
+  <Button variant="ghost" class="p-2 hover:bg-accent" onclick={handleRefresh} disabled={isRefreshing || connectionStatus === 'connecting'}>
     {#if connectionStatus === 'online'}
       <div class="flex items-center">
         <CircleCheckIcon class="inline h-5 w-5 text-green-600 mr-1" />
@@ -29,10 +44,10 @@
     {:else if connectionStatus === 'connecting'}
       <div class="flex items-center">
         <Loader2Icon class="inline h-5 w-5 text-yellow-600 mr-1 animate-spin" />
-        <span class="text-yellow-600 font-semibold">Connecting Server...</span>
+        <span class="text-yellow-600 font-semibold">Connecting...</span>
       </div>
     {/if}
-  </div>
+  </Button>
 
   <!--Vertical Divider-->
   <div class="my-2 border-l h-6 mx-4"></div>

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { config } from '$lib/stores/config.svelte';
+	import { testBackendConnection, testPlexConnection } from '$lib/api/endpoints';
 	import Button from "$lib/components/ui/button/button.svelte";
 	import Input from "$lib/components/ui/input/input.svelte";
 	import Separator from "$lib/components/ui/separator/separator.svelte";
@@ -7,34 +9,107 @@
 	import KeyIcon from '@lucide/svelte/icons/key';
 	import TimerIcon from '@lucide/svelte/icons/timer';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import XIcon from '@lucide/svelte/icons/x';
 
-	let backendUrl = $state('http://localhost:8000');
-	let plexServerUrl = $state('http://localhost:32400');
-	let plexToken = $state('');
-	let cooldownInterval = $state(10);
+	// Local state bound to inputs
+	let backendUrl = $state(config.backendUrl);
+	let plexServerUrl = $state(config.plexServerUrl);
+	let plexToken = $state(config.plexToken);
+	let cooldownInterval = $state(config.cooldownInterval);
+	
+	// Test states
 	let isTestingBackend = $state(false);
+	let backendTestResult = $state<'success' | 'error' | null>(null);
+	
 	let isTestingPlex = $state(false);
+	let plexTestResult = $state<'success' | 'error' | null>(null);
+	
+	// Save state
+	let isSaving = $state(false);
+	let saveSuccess = $state(false);
 
-	function testBackendConnection() {
+	async function testBackend() {
 		isTestingBackend = true;
-		// TODO: Implement actual API call
-		setTimeout(() => {
+		backendTestResult = null;
+		
+		try {
+			// Create a temporary API client for testing without affecting global state
+			const { createApiClient } = await import('$lib/api/client');
+			const tempClient = createApiClient({ baseUrl: backendUrl });
+			
+			// Use the temporary client to test connectivity
+			const result = await tempClient.healthCheck();
+			backendTestResult = result ? 'success' : 'error';
+		} catch {
+			backendTestResult = 'error';
+		} finally {
 			isTestingBackend = false;
-		}, 1000);
+		}
 	}
 
-	function testPlexConnection() {
+	async function testPlex() {
 		isTestingPlex = true;
-		// TODO: Implement actual API call
-		setTimeout(() => {
+		plexTestResult = null;
+		
+		try {
+			const result = await testPlexConnection(plexServerUrl, plexToken);
+			plexTestResult = result ? 'success' : 'error';
+		} catch {
+			plexTestResult = 'error';
+		} finally {
 			isTestingPlex = false;
-		}, 1000);
+		}
 	}
 
-	function saveSettings() {
-		// TODO: Implement save functionality (cookies)
-		console.log('Settings saved:', { backendUrl, plexServerUrl, plexToken, cooldownInterval });
+	async function saveSettings() {
+		isSaving = true;
+		saveSuccess = false;
+		
+		try {
+			// Check if backend URL changed
+			const urlChanged = backendUrl !== config.backendUrl;
+			
+			// Update config store (automatically persists to localStorage)
+			config.backendUrl = backendUrl;
+			config.plexServerUrl = plexServerUrl;
+			config.plexToken = plexToken;
+			config.cooldownInterval = cooldownInterval;
+			
+			// If backend URL changed, force refresh connection status
+			if (urlChanged) {
+				await config.loadFromBackend(true);
+			}
+			
+			saveSuccess = true;
+			
+			// Clear success message after 3 seconds
+			setTimeout(() => {
+				saveSuccess = false;
+			}, 3000);
+		} finally {
+			isSaving = false;
+		}
 	}
+
+	function cancel() {
+		// Reset to current config values
+		backendUrl = config.backendUrl;
+		plexServerUrl = config.plexServerUrl;
+		plexToken = config.plexToken;
+		cooldownInterval = config.cooldownInterval;
+		
+		// Navigate back
+		window.location.href = '/';
+	}
+	
+	// Check if there are unsaved changes
+	let hasChanges = $derived(
+		backendUrl !== config.backendUrl ||
+		plexServerUrl !== config.plexServerUrl ||
+		plexToken !== config.plexToken ||
+		cooldownInterval !== config.cooldownInterval
+	);
 </script>
 
 <main class="min-h-screen bg-background">
@@ -79,12 +154,21 @@
 							<Button
 								variant="secondary"
 								size="icon"
-								onclick={testBackendConnection}
+								onclick={testBackend}
 								disabled={isTestingBackend}
 							>
 								<RefreshIcon class={`h-4 w-4 ${isTestingBackend ? 'animate-spin' : ''}`} />
 								<span class="sr-only">Test Connection</span>
 							</Button>
+							{#if backendTestResult === 'success'}
+								<div class="flex items-center justify-center w-10 h-10 rounded-md bg-green-100 dark:bg-green-900/20">
+									<CheckIcon class="h-4 w-4 text-green-600 dark:text-green-400" />
+								</div>
+							{:else if backendTestResult === 'error'}
+								<div class="flex items-center justify-center w-10 h-10 rounded-md bg-red-100 dark:bg-red-900/20">
+									<XIcon class="h-4 w-4 text-red-600 dark:text-red-400" />
+								</div>
+							{/if}
 						</div>
 						<p class="text-xs text-muted-foreground">
 							The URL where your Plex-Watcher backend service is running
@@ -121,12 +205,21 @@
 							<Button
 								variant="secondary"
 								size="icon"
-								onclick={testPlexConnection}
+								onclick={testPlex}
 								disabled={isTestingPlex || !plexToken}
 							>
 								<RefreshIcon class={`h-4 w-4 ${isTestingPlex ? 'animate-spin' : ''}`} />
 								<span class="sr-only">Test Connection</span>
 							</Button>
+							{#if plexTestResult === 'success'}
+								<div class="flex items-center justify-center w-10 h-10 rounded-md bg-green-100 dark:bg-green-900/20">
+									<CheckIcon class="h-4 w-4 text-green-600 dark:text-green-400" />
+								</div>
+							{:else if plexTestResult === 'error'}
+								<div class="flex items-center justify-center w-10 h-10 rounded-md bg-red-100 dark:bg-red-900/20">
+									<XIcon class="h-4 w-4 text-red-600 dark:text-red-400" />
+								</div>
+							{/if}
 						</div>
 						<p class="text-xs text-muted-foreground">
 							The URL of your Plex Media Server (e.g., http://localhost:32400)
@@ -188,13 +281,24 @@
 		</div>
 
 		<!-- Action Buttons -->
-		<div class="flex justify-end gap-3 pt-4">
-			<Button variant="outline" onclick={() => window.location.href = '/'}>
-				Cancel
-			</Button>
-			<Button onclick={saveSettings}>
-				Save Settings
-			</Button>
+		<div class="flex justify-between items-center gap-3 pt-4">
+			{#if saveSuccess}
+				<div class="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+					<CheckIcon class="h-4 w-4" />
+					<span>Settings saved successfully</span>
+				</div>
+			{:else}
+				<div></div>
+			{/if}
+			
+			<div class="flex gap-3">
+				<Button variant="outline" onclick={cancel}>
+					Cancel
+				</Button>
+				<Button onclick={saveSettings} disabled={isSaving || !hasChanges}>
+					{isSaving ? 'Saving...' : 'Save Settings'}
+				</Button>
+			</div>
 		</div>
 	</div>
 </main>
