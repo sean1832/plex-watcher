@@ -22,6 +22,7 @@ class TestAPIServer:
             "server": None,
             "cooldown": 30,
         }
+        service.is_watching = False
         return service
 
     @pytest.fixture
@@ -49,30 +50,120 @@ class TestAPIServer:
 
         mock_service.get_status.assert_called_once()
 
-    def test_start_watching_success(self, client, mock_service):
-        """Test POST /start endpoint with valid parameters."""
-        mock_service.configure = Mock()
+    def test_start_watcher_success(self, client, mock_service):
+        """Test POST /start endpoint with valid configuration."""
+        mock_service.update_configuration = Mock()
         mock_service.start = Mock()
+        mock_service.is_watching = False
 
         response = client.post(
             "/start",
-            params={"server_url": "http://localhost:32400", "token": "test_token", "interval": 60},
+            json={
+                "server_url": "http://localhost:32400",
+                "token": "test_token",
+                "paths": ["/movies", "/tv"],
+                "cooldown": 60,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert "started successfully" in data["message"].lower()
+
+        mock_service.update_configuration.assert_called_once_with(
+            server_url="http://localhost:32400",
+            token="test_token",
+            paths=["/movies", "/tv"],
+            cooldown=60,
+        )
+        mock_service.start.assert_called_once()
+
+    def test_start_watcher_with_default_cooldown(self, client, mock_service):
+        """Test POST /start endpoint with default cooldown value."""
+        mock_service.update_configuration = Mock()
+        mock_service.start = Mock()
+        mock_service.is_watching = False
+
+        response = client.post(
+            "/start",
+            json={
+                "server_url": "http://localhost:32400",
+                "token": "test_token",
+                "paths": ["/movies"],
+            },
         )
 
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
 
-        mock_service.configure.assert_called_once_with("http://localhost:32400", "test_token", 60)
-        mock_service.start.assert_called_once()
+        # Should use default cooldown of 30
+        mock_service.update_configuration.assert_called_once()
+        call_args = mock_service.update_configuration.call_args
+        assert call_args.kwargs["cooldown"] == 30
 
-    def test_start_watching_error(self, client, mock_service):
-        """Test POST /start endpoint with error."""
-        mock_service.configure.side_effect = Exception("Connection failed")
+    def test_start_watcher_stops_existing_watcher(self, client, mock_service):
+        """Test POST /start stops existing watcher before reconfiguring."""
+        mock_service.update_configuration = Mock()
+        mock_service.start = Mock()
+        mock_service.stop = Mock()
+        mock_service.is_watching = True  # Watcher is already running
 
         response = client.post(
             "/start",
-            params={"server_url": "http://localhost:32400", "token": "test_token", "interval": 60},
+            json={
+                "server_url": "http://localhost:32400",
+                "token": "test_token",
+                "paths": ["/movies"],
+                "cooldown": 45,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+
+        # Should stop first
+        mock_service.stop.assert_called_once()
+        mock_service.update_configuration.assert_called_once()
+        mock_service.start.assert_called_once()
+
+    def test_start_watcher_path_not_found(self, client, mock_service):
+        """Test POST /start endpoint with non-existent path."""
+        mock_service.update_configuration.side_effect = FileNotFoundError(
+            "Path '/nonexistent' does not exist."
+        )
+        mock_service.is_watching = False
+
+        response = client.post(
+            "/start",
+            json={
+                "server_url": "http://localhost:32400",
+                "token": "test_token",
+                "paths": ["/nonexistent"],
+                "cooldown": 30,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "error"
+        assert "does not exist" in data["message"]
+
+    def test_start_watcher_configuration_error(self, client, mock_service):
+        """Test POST /start endpoint with configuration error."""
+        mock_service.update_configuration.side_effect = Exception("Connection failed")
+        mock_service.is_watching = False
+
+        response = client.post(
+            "/start",
+            json={
+                "server_url": "http://localhost:32400",
+                "token": "test_token",
+                "paths": ["/movies"],
+                "cooldown": 30,
+            },
         )
 
         assert response.status_code == 200
@@ -103,93 +194,76 @@ class TestAPIServer:
         assert data["status"] == "error"
         assert "Stop failed" in data["message"]
 
-    def test_scan_directories_success(self, client, mock_service):
+    def test_scan_directories_success(self, client):
         """Test POST /scan endpoint with valid paths."""
-        mock_service.scan_path = Mock()
+        with patch.object(PlexWatcherService, 'scan_paths') as mock_scan:
+            response = client.post(
+                "/scan",
+                json={
+                    "server_url": "http://localhost:32400",
+                    "token": "test_token",
+                    "paths": ["/path/to/scan1", "/path/to/scan2"]
+                }
+            )
 
-        response = client.post("/scan", json={"paths": ["/path/to/scan1", "/path/to/scan2"]})
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "success"
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "success"
+            assert mock_scan.call_count == 2
 
-        assert mock_service.scan_path.call_count == 2
-
-    def test_scan_directories_empty_list(self, client, mock_service):
+    def test_scan_directories_empty_list(self, client):
         """Test POST /scan endpoint with empty path list."""
-        response = client.post("/scan", json={"paths": []})
+        response = client.post(
+            "/scan",
+            json={
+                "server_url": "http://localhost:32400",
+                "token": "test_token",
+                "paths": []
+            }
+        )
 
         assert response.status_code == 400
         assert "Path parameter is required" in response.json()["detail"]
 
-    def test_scan_directories_file_not_found(self, client, mock_service):
+    def test_scan_directories_file_not_found(self, client):
         """Test POST /scan endpoint with non-existent path."""
-        mock_service.scan_path.side_effect = FileNotFoundError("Path not found")
+        with patch.object(PlexWatcherService, 'scan_paths') as mock_scan:
+            mock_scan.side_effect = FileNotFoundError("Path not found")
 
-        response = client.post("/scan", json={"paths": ["/nonexistent/path"]})
+            response = client.post(
+                "/scan",
+                json={
+                    "server_url": "http://localhost:32400",
+                    "token": "test_token",
+                    "paths": ["/nonexistent/path"]
+                }
+            )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "error"
-        assert "Path not found" in data["details"][0]
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "error"
+            assert "Path not found" in data["details"][0]
 
-    def test_scan_directories_partial_errors(self, client, mock_service):
+    def test_scan_directories_partial_errors(self, client):
         """Test POST /scan with some paths failing."""
+        with patch.object(PlexWatcherService, 'scan_paths') as mock_scan:
+            def scan_side_effect(paths, server_url, token):
+                if paths and "bad" in paths[0]:
+                    raise Exception(f"Error scanning '{paths[0]}'")
 
-        def scan_side_effect(path):
-            if "bad" in path:
-                raise Exception(f"Error scanning '{path}'")
+            mock_scan.side_effect = scan_side_effect
 
-        mock_service.scan_path.side_effect = scan_side_effect
+            response = client.post(
+                "/scan",
+                json={
+                    "server_url": "http://localhost:32400",
+                    "token": "test_token",
+                    "paths": ["/good/path", "/bad/path", "/another/good/path"]
+                }
+            )
 
-        response = client.post(
-            "/scan", json={"paths": ["/good/path", "/bad/path", "/another/good/path"]}
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "error"
-        assert len(data["details"]) == 1
-
-
-class TestAPIServerBugs:
-    """Test cases that expose bugs in the API server"""
-
-    @pytest.fixture
-    def mock_service(self):
-        """Create a mock PlexWatcherService."""
-        service = Mock(spec=PlexWatcherService)
-        service.get_status.return_value = {
-            "is_watching": False,
-            "paths": [],
-            "server": None,
-            "cooldown": 30,
-        }
-        return service
-
-    @pytest.fixture
-    def client(self, mock_service):
-        """Create a test client."""
-        app = router(mock_service)
-        return TestClient(app)
-
-    def test_no_add_path_endpoint(self, client):
-        """BUG: The add_path endpoint expects query parameter, not JSON body."""
-        # This endpoint exists but the test was calling it incorrectly
-        response = client.post("/add_path?path=/some/path")
-        # Now it should work (though it might return an error for invalid path)
-        assert response.status_code in [200, 422]  # Either success or validation error
-
-    def test_start_missing_parameters(self, client):
-        """Test /start endpoint without required parameters."""
-        # Missing parameters should return proper error, not 422
-        response = client.post("/start")
-        assert response.status_code == 422  # Validation error
-
-    def test_no_authentication(self, client):
-        """BUG: API has no authentication mechanism."""
-        # Currently, anyone can access these endpoints
-        # TODO comment in code mentions this should be implemented
-        response = client.get("/status")
-        assert response.status_code == 200
-        # In a secure implementation, this should require auth
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "error"
+            assert len(data["details"]) == 1

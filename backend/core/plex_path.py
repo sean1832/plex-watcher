@@ -96,7 +96,7 @@ class PlexPath:
             # No match found - this is an error condition
             raise ValueError(
                 f"Could not map local path '{local_path}' to any Plex library root. "
-                f"Available roots: {[str(root) for root, _ in self._roots]}"
+                f"Available roots: {[str(root.as_posix()) for root, _ in self._roots]}"
             )
 
     @classmethod

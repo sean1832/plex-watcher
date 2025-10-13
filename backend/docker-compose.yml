@@ -12,6 +12,7 @@ services:
       - LOG_LEVEL=INFO
       - MEDIA_ROOT=/media
       - CONFIG_PATH=/config/config.json
+      - CORS_ORIGINS=* # <-- Adjust this for security in production
     user: "1036:100" # <-- UID:GID. Must match the user running docker on your host system.
     volumes:
       # Mount your media directories to watch as read-only
