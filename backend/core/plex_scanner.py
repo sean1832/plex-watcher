@@ -15,7 +15,7 @@ class PlexScanner:
 
         # 1) fetch all sections
         self.sections = {sec.title: sec for sec in plex.library.sections()}
-        # 2) build your list of (plex_root_path, section)
+        # 2) build list of (plex_root_path, section)
         mapping = []
         for sec in self.sections.values():
             for loc in sec.locations:
@@ -31,7 +31,7 @@ class PlexScanner:
 
     def get_type(self, path: PlexPath) -> Literal["movie", "show"]:
         """
-        Figure out whether a given file/folder belongs to your Movies or TV library,
+        Figure out whether a given file/folder belongs to Movies or TV library,
         and return "movie" for a Movies section, or "show" for a TV Shows section.
         """
         # Use PlexPath's methods to check if it's a directory

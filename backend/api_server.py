@@ -4,13 +4,13 @@
 
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
 from plexapi.server import PlexServer
+from pydantic import BaseModel
 
 from backend import logger
 from backend.core.plex_watcher_service import PlexWatcherService
@@ -28,6 +28,8 @@ class StartRequest(BaseModel):
 class ScanRequest(BaseModel):
     """Request model for scan endpoint."""
 
+    server_url: str
+    token: str
     paths: List[str]
 
 
@@ -56,7 +58,7 @@ def router(service: PlexWatcherService) -> FastAPI:
     @app.get("/status", description="Get current status of the Plex Watcher")
     async def get_status():
         return service.get_status()
-    
+
     @app.get("/plex_test", description="Test connection to Plex server")
     async def test_plex_connection(server_url: str, token: str) -> bool:
         try:
@@ -71,10 +73,10 @@ def router(service: PlexWatcherService) -> FastAPI:
     async def start_watcher(request: StartRequest):
         """
         Start the Plex Watcher with complete configuration.
-        
+
         This endpoint accepts the full configuration including server URL, token,
         paths, and cooldown.
-        
+
         The watcher will be stopped if already running, then reconfigured and
         restarted with the new settings.
         """
@@ -82,7 +84,7 @@ def router(service: PlexWatcherService) -> FastAPI:
             # Stop watcher if running
             if service.is_watching:
                 service.stop()
-            
+
             # Update configuration atomically
             service.update_configuration(
                 server_url=request.server_url,
@@ -90,61 +92,47 @@ def router(service: PlexWatcherService) -> FastAPI:
                 paths=request.paths,
                 cooldown=request.cooldown,
             )
-            
+
             # Start watcher
             service.start()
             logger.info("Watcher configured and started successfully.")
-            return {
-                "status": "success",
-                "message": "Watcher started successfully.",
-            }
+            return {"message": "Watcher started successfully."}
         except FileNotFoundError as fnf:
             logger.error(f"Path not found: {fnf}")
-            return {"status": "error", "message": str(fnf)}
+            raise HTTPException(status_code=400, detail=f"Path not found: {str(fnf)}")
         except Exception as e:
             logger.error(f"Error starting watcher: {e}")
-            return {"status": "error", "message": str(e)}
-    
+            raise HTTPException(status_code=500, detail=f"Error starting watcher: {str(e)}")
+
     @app.post("/restart", description="Restart the watcher with existing configuration")
     async def restart():
         try:
             if service.is_watching:
                 service.stop()
             service.start()
-            return {"status": "success", "message": "Watcher restarted successfully."}
+            return {"message": "Watcher restarted successfully."}
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            raise HTTPException(status_code=500, detail=f"Error restarting watcher: {str(e)}")
 
     @app.post("/stop", description="Stop watching directories")
     async def stop_watching():
         try:
             service.stop()
-            return {"status": "success", "message": "Stopped watching directories."}
+            return {"message": "Stopped watching directories."}
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            raise HTTPException(status_code=500, detail=f"Error stopping watcher: {str(e)}")
 
     @app.post("/scan", description="Scan a specific directory")
     async def scan_directories(request: ScanRequest):
         if not request.paths:
             raise HTTPException(status_code=400, detail="Path parameter is required.")
-        errors = []
-        for path in request.paths:
-            try:
-                service.scan_path(path)
-            except FileNotFoundError as fnf:
-                errors.append(str(fnf))
-                continue
-            except Exception as e:
-                errors.append(f"Error scanning '{path}': {e}")
-                continue
+        errors = PlexWatcherService.scan_paths(
+            paths=request.paths, server_url=request.server_url, token=request.token
+        )
 
-        if errors:
-            return {
-                "status": "error",
-                "message": "Some errors occurred during scanning.",
-                "details": errors,
-            }
-        return {"status": "success", "message": "Scanned directories successfully."}
+        if len(errors) > 0:
+            raise HTTPException(status_code=500, detail={"errors": errors})
+        return {"message": "Scanned directories successfully."}
 
     return app
 

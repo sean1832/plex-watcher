@@ -68,6 +68,14 @@ class PlexWatcherService:
             "cooldown": self.cooldown,
         }
 
+    def add_path(self, path: str) -> None:
+        """Add a new path to watch."""
+        p = Path(self._MEDIA_ROOT, path).resolve()
+        if not p.exists():
+            raise FileNotFoundError(f"Path '{p}' does not exist.")
+        self.paths.add(p)
+        logger.info(f"Added path to watch: {p}")
+
     def configure(self, server_url: str, token: str, interval: int) -> None:
         """Configure scanner and handler with Plex server credentials."""
         self.server = PlexServer(baseurl=server_url, token=token)
@@ -83,16 +91,16 @@ class PlexWatcherService:
     ) -> None:
         """
         Update complete configuration atomically.
-        
+
         It accepts the full configuration and applies all
         changes at once, ensuring consistency.
-        
+
         Args:
             server_url: Plex server URL
             token: Plex authentication token
             paths: List of paths to watch (will replace existing paths)
             cooldown: Debounce cooldown in seconds
-            
+
         Raises:
             FileNotFoundError: If any path doesn't exist
         """
@@ -103,18 +111,18 @@ class PlexWatcherService:
             if not p.exists():
                 raise FileNotFoundError(f"Path '{p}' does not exist.")
             validated_paths.add(p)
-        
+
         # Configure server and scanner
         self.server = PlexServer(baseurl=server_url, token=token)
         self.cooldown = cooldown
         self.scanner = PlexScanner(plex=self.server)
-        
+
         # Update handler with new cooldown (create new handler to avoid timer issues)
         self.handler = PlexWatcherHandler(self.scanner, self.observer, cooldown=self.cooldown)
-        
+
         # Replace paths atomically
         self.paths = validated_paths
-        
+
         logger.info(
             f"Configuration updated: Server={self.server._baseurl}, "
             f"Paths={len(self.paths)}, Cooldown={self.cooldown}s"
@@ -157,11 +165,32 @@ class PlexWatcherService:
         self.stop()
         self.start()
 
-    def scan_path(self, path: str) -> None:
-        if not self.scanner:
-            raise RuntimeError("PlexWatcherService is not configured. Call configure() first.")
-        p = Path(self._MEDIA_ROOT, path).resolve()
-        if not p.exists():
-            raise FileNotFoundError(f"Path '{p}' does not exist.")
-        self.scanner.scan_section(PlexPath(self.scanner._roots, p))
-        logger.info(f"Manual scan initiated for path: {p}")
+    @staticmethod
+    def scan_paths(paths: list[str], server_url: str, token: str) -> list[str]:
+        """Manually scan multiple paths immediately."""
+        if len(paths) == 0:
+            logger.info("No paths provided for manual scan.")
+            return []
+
+        media_root = Path(os.getenv("MEDIA_ROOT", "/media")).resolve()
+        plex = PlexServer(baseurl=server_url, token=token)
+        scanner = PlexScanner(plex=plex)
+        logger.info(f"Starting manual scan for {len(paths)} paths.")
+        errors = []
+        for path in paths:
+            try:
+                p = Path(media_root, path).resolve()
+                if not p.exists():
+                    raise FileNotFoundError(f"Path '{p}' does not exist.")
+                logger.info(f"Manual scan initiated for path: {p}")
+                scanner.scan_section(PlexPath.from_path(scanner._roots, p))
+            except FileNotFoundError as fnf:
+                logger.error(fnf)
+                errors.append(str(fnf))
+                continue
+            except Exception as e:
+                logger.error(f"Unhandled error for '{path}': {e}")
+                errors.append(f"Unhandled error for {path}: {e}")
+                continue
+        logger.info("Manual scan completed.")
+        return errors
