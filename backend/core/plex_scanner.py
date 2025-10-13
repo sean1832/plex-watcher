@@ -19,7 +19,7 @@ class PlexScanner:
         mapping = []
         for sec in self.sections.values():
             for loc in sec.locations:
-                plex_root = Path(loc).resolve()
+                plex_root = Path(loc)
                 mapping.append((plex_root, sec))
         # sort longest paths first (nested libs before top‐level)
         self._roots: list[tuple[Path, LibrarySection]] = sorted(

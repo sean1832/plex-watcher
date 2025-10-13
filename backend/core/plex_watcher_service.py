@@ -12,6 +12,7 @@ from backend.core.plex_scanner import PlexScanner
 from backend.core.plex_watcher_handler import PlexWatcherHandler
 
 
+
 class PlexWatcherService:
     def __init__(self) -> None:
         self.observer = watchdog.observers.Observer()
@@ -169,31 +170,30 @@ class PlexWatcherService:
         self.start()
 
     @staticmethod
-    def scan_paths(paths: list[str], server_url: str, token: str) -> list[str]:
+    def scan_paths(paths: list[str], server_url: str, token: str) -> None:
         """Manually scan multiple paths immediately."""
         if len(paths) == 0:
             logger.info("No paths provided for manual scan.")
-            return []
 
         media_root = Path(os.getenv("MEDIA_ROOT", "/media")).resolve()
         plex = PlexServer(baseurl=server_url, token=token)
         scanner = PlexScanner(plex=plex)
         logger.info(f"Starting manual scan for {len(paths)} paths.")
-        errors = []
-        for path in paths:
-            try:
+        try:
+            for path in paths:
                 p = Path(media_root, path).resolve()
                 if not p.exists():
                     raise FileNotFoundError(f"Path '{p}' does not exist.")
-                logger.info(f"Manual scan initiated for path: {p}")
+                logger.info(f"Manual scan initiated for path: {path}")
                 scanner.scan_section(PlexPath.from_path(scanner._roots, p))
-            except FileNotFoundError as fnf:
-                logger.error(fnf)
-                errors.append(str(fnf))
-                continue
-            except Exception as e:
-                logger.error(f"Unhandled error for '{path}': {e}")
-                errors.append(f"Unhandled error for {path}: {e}")
-                continue
+        except FileNotFoundError as fnf:
+            logger.error(f"File not found during manual scan: {fnf}")
+            raise
+        except Exception as e:
+            logger.error(f"Error during manual scan: {e}")
+            # print the full traceback for debugging
+            import traceback
+            traceback.print_exc()
+
+            raise
         logger.info("Manual scan completed.")
-        return errors

@@ -126,12 +126,14 @@ def router(service: PlexWatcherService) -> FastAPI:
     async def scan_directories(request: ScanRequest):
         if not request.paths:
             raise HTTPException(status_code=400, detail="Path parameter is required.")
-        errors = PlexWatcherService.scan_paths(
-            paths=request.paths, server_url=request.server_url, token=request.token
-        )
-
-        if len(errors) > 0:
-            raise HTTPException(status_code=500, detail={"errors": errors})
+        try:
+            PlexWatcherService.scan_paths(
+                paths=request.paths, server_url=request.server_url, token=request.token
+            )
+        except FileNotFoundError as fnf:
+            raise HTTPException(status_code=400, detail=f"Path not found: {str(fnf)}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error scanning directories: {str(e)}")
         return {"message": "Scanned directories successfully."}
 
     return app
