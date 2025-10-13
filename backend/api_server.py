@@ -2,8 +2,6 @@
 # POST /start, POST /stop, POST /scan
 # TODO: implement authentication (API key or token)
 
-import os
-from pathlib import Path
 from typing import List
 
 from fastapi import FastAPI, HTTPException
@@ -13,6 +11,7 @@ from plexapi.server import PlexServer
 from pydantic import BaseModel
 
 from backend import logger
+from backend.core.env_config import get_config
 from backend.core.plex_watcher_service import PlexWatcherService
 
 
@@ -36,15 +35,13 @@ class ScanRequest(BaseModel):
 def router(service: PlexWatcherService) -> FastAPI:
     app = FastAPI(title="Plex Watcher API")
 
+    # Get environment configuration
+    config = get_config()
+    
     # Configure CORS for frontend communication
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",  # Vite dev server
-            "http://localhost:4173",  # Vite preview server
-            "http://127.0.0.1:5173",
-            "http://127.0.0.1:4173",
-        ],
+        allow_origins=config.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
         allow_headers=["*"],  # Allow all headers
@@ -96,13 +93,13 @@ def router(service: PlexWatcherService) -> FastAPI:
             # Start watcher
             service.start()
             logger.info("Watcher configured and started successfully.")
-            return {"message": "Watcher started successfully."}
+            return {"status": "success", "message": "Watcher started successfully."}
         except FileNotFoundError as fnf:
             logger.error(f"Path not found: {fnf}")
-            raise HTTPException(status_code=400, detail=f"Path not found: {str(fnf)}")
+            return {"status": "error", "message": f"Path not found: {str(fnf)}"}
         except Exception as e:
             logger.error(f"Error starting watcher: {e}")
-            raise HTTPException(status_code=500, detail=f"Error starting watcher: {str(e)}")
+            return {"status": "error", "message": f"Error starting watcher: {str(e)}"}
 
     @app.post("/restart", description="Restart the watcher with existing configuration")
     async def restart():
@@ -110,31 +107,38 @@ def router(service: PlexWatcherService) -> FastAPI:
             if service.is_watching:
                 service.stop()
             service.start()
-            return {"message": "Watcher restarted successfully."}
+            return {"status": "success", "message": "Watcher restarted successfully."}
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error restarting watcher: {str(e)}")
+            return {"status": "error", "message": f"Error restarting watcher: {str(e)}"}
 
     @app.post("/stop", description="Stop watching directories")
     async def stop_watching():
         try:
             service.stop()
-            return {"message": "Stopped watching directories."}
+            return {"status": "success", "message": "Stopped watching directories."}
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error stopping watcher: {str(e)}")
+            return {"status": "error", "message": f"Error stopping watcher: {str(e)}"}
 
     @app.post("/scan", description="Scan a specific directory")
     async def scan_directories(request: ScanRequest):
         if not request.paths:
             raise HTTPException(status_code=400, detail="Path parameter is required.")
-        try:
-            PlexWatcherService.scan_paths(
-                paths=request.paths, server_url=request.server_url, token=request.token
-            )
-        except FileNotFoundError as fnf:
-            raise HTTPException(status_code=400, detail=f"Path not found: {str(fnf)}")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error scanning directories: {str(e)}")
-        return {"message": "Scanned directories successfully."}
+        
+        errors = []
+        for path in request.paths:
+            try:
+                PlexWatcherService.scan_paths(
+                    paths=[path], server_url=request.server_url, token=request.token
+                )
+            except FileNotFoundError as fnf:
+                errors.append(f"Path not found: {str(fnf)}")
+            except Exception as e:
+                errors.append(f"Error scanning '{path}': {str(e)}")
+        
+        if errors:
+            return {"status": "error", "message": "Some paths failed to scan", "details": errors}
+        
+        return {"status": "success", "message": "Scanned directories successfully."}
 
     return app
 
@@ -144,30 +148,40 @@ def main():
 
     import uvicorn
 
+    # Get environment configuration
+    config = get_config()
+    
     parser = argparse.ArgumentParser(description="Plex Watcher API Server")
     parser.add_argument(
         "-H",
         "--host",
         type=str,
-        default=os.getenv("API_HOST", "0.0.0.0"),
-        help="Host to run the API server on",
+        default=config.api_host,
+        help=f"Host to run the API server on (default: {config.api_host})",
     )
     parser.add_argument(
         "-P",
         "--port",
         type=int,
-        default=int(os.getenv("API_PORT", "8000")),
-        help="Port to run the API server on",
+        default=config.api_port,
+        help=f"Port to run the API server on (default: {config.api_port})",
     )
     args = parser.parse_args()
 
-    config_path = Path(os.getenv("CONFIG_PATH", "config.json")).resolve()
-    if config_path.exists():
-        service = PlexWatcherService.load_config(config_path)
-        logger.info(f"Loaded configuration from {config_path}")
+    # Load service configuration
+    if config.config_path.exists():
+        service = PlexWatcherService.load_config(config.config_path)
+        logger.info(f"Loaded configuration from {config.config_path}")
     else:
         service = PlexWatcherService()
         logger.info("No configuration file found, starting with default settings.")
+    
+    # Log startup configuration
+    logger.info(f"Starting API server on {args.host}:{args.port}")
+    logger.info(f"Media root: {config.media_root}")
+    logger.info(f"Config path: {config.config_path}")
+    logger.info(f"CORS origins: {', '.join(config.cors_origins)}")
+    
     app = router(service)
     uvicorn.run(app, host=args.host, port=args.port)
 
