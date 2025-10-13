@@ -37,13 +37,18 @@ class PlexPath:
         self._roots = roots
         local_path = Path(local_path).resolve()
 
-        if validate:
-            # Ensure this path is actually under a Plex root
+        # Always convert to Plex path
+        try:
             plex_path = self._convert_to_plex_path(local_path)
             self._path = plex_path
-        else:
-            # Trust the user, just wrap it
-            self._path = local_path
+        except ValueError:
+            if validate:
+                # Re-raise if validation is required
+                raise
+            else:
+                # If validation is disabled, just use the path as-is
+                # This handles edge cases where conversion fails
+                self._path = local_path
 
     def _convert_to_plex_path(self, local_path: Path) -> Path:
         """
