@@ -1,5 +1,5 @@
 # Multi-stage build for smaller final image
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -67,4 +67,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import os, requests; requests.get(f'http://localhost:{os.getenv(\"API_PORT\", \"8000\")}/status', timeout=5)" || exit 1
 
 # Run the API server with environment variables as arguments
-CMD sh -c "plex-watcher-apibackend --host ${API_HOST} --port ${API_PORT}"
+CMD ["sh", "-c", "plex-watcher-apibackend --host ${API_HOST} --port ${API_PORT}"]
