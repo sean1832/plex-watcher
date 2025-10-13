@@ -12,8 +12,8 @@ It automatically scans for new, modified, or deleted files and updates the Plex 
 
 ### Backend
 
-see [backend/readme.md](../backend/readme.md)
+see [backend/readme.md](backend/readme.md)
 
 ### Frontend
 
-see [frontend/readme.md](../frontend/readme.md)
+see [frontend/readme.md](frontend/readme.md)
