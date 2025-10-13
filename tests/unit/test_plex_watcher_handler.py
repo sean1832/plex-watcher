@@ -183,12 +183,14 @@ class TestPlexWatcherHandler:
         movie_file = sample_movie_structure / "Inception" / "Inception.mkv"
         event = FileDeletedEvent(str(movie_file))
 
-        # BUG: This will fail because PlexPath tries to validate a deleted file
-        # For now, we'll just test that the method can be called
-        with patch("backend.core.plex_watcher_handler.PlexPath"):
-            with patch.object(handler, "_handle_event") as mock_handle:
-                handler.on_deleted(event)
-                mock_handle.assert_called_once()
+        # Now with the fix, this should work properly
+        with patch.object(handler, "_handle_event") as mock_handle:
+            handler.on_deleted(event)
+            # Should call _handle_event with "DELETED" verb and correct media type
+            assert mock_handle.call_count == 1
+            call_args = mock_handle.call_args[0]
+            assert call_args[1] == "DELETED"  # verb
+            assert call_args[2] in ["movie", "show"]  # media_type
 
         # Clean up timer
         if handler._timer:
@@ -275,6 +277,57 @@ class TestPlexWatcherHandlerBugs:
             handler.on_deleted(event)
             # Should successfully handle the deleted file
             mock_handle.assert_called_once()
+            # Check that deleted=True was passed to get_type
+            handler.scanner.get_type.assert_called_once()
+            call_kwargs = handler.scanner.get_type.call_args
+            # Check if deleted=True was passed
+            assert call_kwargs[1].get("deleted", False) == True
+
+        # Clean up timer
+        if handler._timer:
+            handler._timer.cancel()
+
+    def test_on_deleted_directory(self, handler, sample_movie_structure):
+        """Test handling directory deletion event."""
+        movie_dir = sample_movie_structure / "Inception"
+        event = FileDeletedEvent(str(movie_dir))
+        event.is_directory = True
+
+        with patch.object(handler, "_handle_event") as mock_handle:
+            handler.on_deleted(event)
+            # Should handle deleted directory
+            mock_handle.assert_called_once()
+            call_args = mock_handle.call_args[0]
+            assert "DELETED" in call_args[1]  # verb should contain "DELETED"
+
+        # Clean up timer
+        if handler._timer:
+            handler._timer.cancel()
+
+    def test_on_deleted_show_with_season_folder(self, handler, sample_tv_structure):
+        """Test that deleted show files are correctly identified."""
+        show_file = sample_tv_structure / "Breaking Bad" / "Season 1" / "S01E01.mkv"
+        event = FileDeletedEvent(str(show_file))
+
+        # Delete the file to simulate real deletion
+        if show_file.exists():
+            show_file.unlink()
+
+        # Configure mock to return "show" for paths with "Season" folder
+        def mock_get_type(path, deleted=False):
+            path_str = str(path).lower()
+            if "season" in path_str:
+                return "show"
+            return "movie"
+        
+        handler.scanner.get_type.side_effect = mock_get_type
+
+        with patch.object(handler, "_handle_event") as mock_handle:
+            handler.on_deleted(event)
+            # Should successfully identify as show based on "Season 1" in path
+            mock_handle.assert_called_once()
+            call_args = mock_handle.call_args[0]
+            assert call_args[2] == "show"  # media_type should be "show"
 
         # Clean up timer
         if handler._timer:

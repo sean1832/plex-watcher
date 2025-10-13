@@ -154,3 +154,89 @@ class TestPlexScannerEdgeCases:
         scanner = PlexScanner(mock_server)
         # Should create two roots, one for each location
         assert len(scanner._roots) >= 2
+
+
+class TestPlexScannerDeletedPaths:
+    """Test scanner handling of deleted files and directories"""
+
+    def test_get_type_deleted_movie_file(self, mock_plex_with_sections, mock_roots, temp_dir):
+        """Test getting type for a deleted movie file using path structure."""
+        scanner = PlexScanner(mock_plex_with_sections)
+        scanner._roots = mock_roots
+
+        # Create a path that looks like a movie (no "Season X" in path)
+        deleted_movie = temp_dir / "movies" / "Inception" / "Inception.mkv"
+        plex_path = PlexPath(mock_roots, deleted_movie, validate=False)
+
+        # Should still be able to determine it's a movie even if deleted
+        media_type = scanner.get_type(plex_path, deleted=True)
+        assert media_type == "movie"
+
+    def test_get_type_deleted_show_file(self, mock_plex_with_sections, mock_roots, temp_dir):
+        """Test getting type for a deleted show file with Season folder."""
+        scanner = PlexScanner(mock_plex_with_sections)
+        scanner._roots = mock_roots
+
+        # Create a path that looks like a show (has "Season X" in path)
+        deleted_show = temp_dir / "tv" / "Breaking Bad" / "Season 1" / "S01E01.mkv"
+        plex_path = PlexPath(mock_roots, deleted_show, validate=False)
+
+        # Should detect it's a show from the "Season 1" folder
+        media_type = scanner.get_type(plex_path, deleted=True)
+        assert media_type == "show"
+
+    def test_get_type_deleted_directory(self, mock_plex_with_sections, mock_roots, temp_dir):
+        """Test getting type for a deleted directory."""
+        scanner = PlexScanner(mock_plex_with_sections)
+        scanner._roots = mock_roots
+
+        # Create a path for a deleted movie directory
+        deleted_dir = temp_dir / "movies" / "Inception"
+        plex_path = PlexPath(mock_roots, deleted_dir, validate=False)
+
+        # Should still work for deleted directories
+        media_type = scanner.get_type(plex_path, deleted=True)
+        assert media_type == "movie"
+
+    def test_get_type_deleted_show_directory(self, mock_plex_with_sections, mock_roots, temp_dir):
+        """Test getting type for a deleted show directory with Season in path."""
+        scanner = PlexScanner(mock_plex_with_sections)
+        scanner._roots = mock_roots
+
+        # Create a path with Season folder
+        deleted_dir = temp_dir / "tv" / "Breaking Bad" / "Season 2"
+        plex_path = PlexPath(mock_roots, deleted_dir, validate=False)
+
+        # Should detect show type from Season folder
+        media_type = scanner.get_type(plex_path, deleted=True)
+        assert media_type == "show"
+
+    def test_find_section_deleted_path(self, mock_plex_with_sections, mock_roots, temp_dir):
+        """Test finding section for a deleted path."""
+        scanner = PlexScanner(mock_plex_with_sections)
+        scanner._roots = mock_roots
+
+        # Create a deleted path under movies root
+        deleted_path = temp_dir / "movies" / "SomeMovie" / "file.mkv"
+        plex_path = PlexPath(mock_roots, deleted_path, validate=False)
+
+        # Should still find the section by path matching
+        section = scanner._find_section(plex_path, allow_deleted=True)
+        assert section.title == "Movies"
+
+    def test_scan_section_deleted_path(self, mock_plex_with_sections, mock_roots, temp_dir):
+        """Test that scanning a deleted path still triggers Plex update."""
+        scanner = PlexScanner(mock_plex_with_sections)
+        scanner._roots = mock_roots
+
+        # Create a deleted path
+        deleted_path = temp_dir / "movies" / "DeletedMovie"
+        plex_path = PlexPath(mock_roots, deleted_path, validate=False)
+
+        with patch("time.sleep"):
+            scanner.scan_section(plex_path)
+
+        # Verify that the section's update method was called
+        movie_section = mock_roots[1][1]
+        movie_section.update.assert_called_once()
+
