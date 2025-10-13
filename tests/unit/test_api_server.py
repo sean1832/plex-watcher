@@ -194,50 +194,76 @@ class TestAPIServer:
         assert data["status"] == "error"
         assert "Stop failed" in data["message"]
 
-    def test_scan_directories_success(self, client, mock_service):
+    def test_scan_directories_success(self, client):
         """Test POST /scan endpoint with valid paths."""
-        mock_service.scan_path = Mock()
+        with patch.object(PlexWatcherService, 'scan_paths') as mock_scan:
+            response = client.post(
+                "/scan",
+                json={
+                    "server_url": "http://localhost:32400",
+                    "token": "test_token",
+                    "paths": ["/path/to/scan1", "/path/to/scan2"]
+                }
+            )
 
-        response = client.post("/scan", json={"paths": ["/path/to/scan1", "/path/to/scan2"]})
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "success"
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "success"
+            assert mock_scan.call_count == 2
 
-        assert mock_service.scan_path.call_count == 2
-
-    def test_scan_directories_empty_list(self, client, mock_service):
+    def test_scan_directories_empty_list(self, client):
         """Test POST /scan endpoint with empty path list."""
-        response = client.post("/scan", json={"paths": []})
+        response = client.post(
+            "/scan",
+            json={
+                "server_url": "http://localhost:32400",
+                "token": "test_token",
+                "paths": []
+            }
+        )
 
         assert response.status_code == 400
         assert "Path parameter is required" in response.json()["detail"]
 
-    def test_scan_directories_file_not_found(self, client, mock_service):
+    def test_scan_directories_file_not_found(self, client):
         """Test POST /scan endpoint with non-existent path."""
-        mock_service.scan_path.side_effect = FileNotFoundError("Path not found")
+        with patch.object(PlexWatcherService, 'scan_paths') as mock_scan:
+            mock_scan.side_effect = FileNotFoundError("Path not found")
 
-        response = client.post("/scan", json={"paths": ["/nonexistent/path"]})
+            response = client.post(
+                "/scan",
+                json={
+                    "server_url": "http://localhost:32400",
+                    "token": "test_token",
+                    "paths": ["/nonexistent/path"]
+                }
+            )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "error"
-        assert "Path not found" in data["details"][0]
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "error"
+            assert "Path not found" in data["details"][0]
 
-    def test_scan_directories_partial_errors(self, client, mock_service):
+    def test_scan_directories_partial_errors(self, client):
         """Test POST /scan with some paths failing."""
+        with patch.object(PlexWatcherService, 'scan_paths') as mock_scan:
+            def scan_side_effect(paths, server_url, token):
+                if paths and "bad" in paths[0]:
+                    raise Exception(f"Error scanning '{paths[0]}'")
 
-        def scan_side_effect(path):
-            if "bad" in path:
-                raise Exception(f"Error scanning '{path}'")
+            mock_scan.side_effect = scan_side_effect
 
-        mock_service.scan_path.side_effect = scan_side_effect
+            response = client.post(
+                "/scan",
+                json={
+                    "server_url": "http://localhost:32400",
+                    "token": "test_token",
+                    "paths": ["/good/path", "/bad/path", "/another/good/path"]
+                }
+            )
 
-        response = client.post(
-            "/scan", json={"paths": ["/good/path", "/bad/path", "/another/good/path"]}
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "error"
-        assert len(data["details"]) == 1
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "error"
+            assert len(data["details"]) == 1
