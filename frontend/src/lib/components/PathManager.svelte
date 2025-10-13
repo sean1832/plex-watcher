@@ -155,9 +155,17 @@
 		<Table.Root>
 			<Table.Header>
 				<Table.Row>
-					<Table.Head class="w-[80px]">Enabled</Table.Head>
+					<Table.Head class="w-[80px]">
+						<div class="ml-2">
+							Enabled
+						</div>
+					</Table.Head>
 					<Table.Head>Directory</Table.Head>
-					<Table.Head class="w-[100px] text-right">Actions</Table.Head>
+					<Table.Head class="w-[100px] text-right">
+						<div class="mr-2">
+							Actions
+						</div>
+					</Table.Head>
 				</Table.Row>
 			</Table.Header>
 			<Table.Body>
@@ -171,12 +179,14 @@
 					{#each pathsState as path (path.id)}
 						<Table.Row>
 							<Table.Cell>
-								<Checkbox
-									checked={path.enabled}
-									onCheckedChange={() => toggleEnabled(path.id)}
-									aria-label="Enable watching this path"
-									class="cursor-pointer"
-								/>
+								<div class="ml-2">
+									<Checkbox
+										checked={path.enabled}
+										onCheckedChange={() => toggleEnabled(path.id)}
+										aria-label="Enable watching this path"
+										class="cursor-pointer"
+									/>
+								</div>
 							</Table.Cell>
 							<Table.Cell class="font-mono text-sm">
 								{#if editingId === path.id}
