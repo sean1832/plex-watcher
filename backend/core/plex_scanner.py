@@ -50,21 +50,31 @@ class PlexScanner:
                 part_lower = part.lower()
                 if part_lower.startswith("season") and any(c.isdigit() for c in part_lower):
                     # This looks like a TV show structure
-                    section = self._find_section(path, allow_deleted=True)
-                    if section and section.type.lower() == "show":
+                    try:
+                        section = self._find_section(path, allow_deleted=True)
+                        if section and section.type.lower() == "show":
+                            return "show"
+                    except ValueError:
+                        # If we can't find section, fallback to heuristic
                         return "show"
-                    # If section says it's a show, trust that
-                    # Otherwise fall through to section check
                     break
             
             # Fall back to section detection (this should work even for deleted paths)
-            section = self._find_section(path, allow_deleted=True)
-            lib_type = section.type.lower()
-            if lib_type == "movie":
-                return "movie"
-            elif lib_type == "show":
-                return "show"
-            else:
+            try:
+                section = self._find_section(path, allow_deleted=True)
+                lib_type = section.type.lower()
+                if lib_type == "movie":
+                    return "movie"
+                elif lib_type == "show":
+                    return "show"
+                else:
+                    return "movie"
+            except ValueError:
+                # If we can't find the section, use path heuristics
+                logger.warning(f"Could not find section for deleted path '{path}', using heuristics")
+                # Check for TV show patterns
+                if any("season" in part.lower() for part in parts):
+                    return "show"
                 return "movie"
         
         # For existing paths, use filesystem checks
@@ -106,7 +116,14 @@ class PlexScanner:
                 return section
             except ValueError:
                 continue
-        raise ValueError(f"No Plex section found for '{directory}'")
+        
+        # If we can't find a section, provide helpful debug info
+        available_roots = [str(root.as_posix()) for root, _ in self._roots]
+        raise ValueError(
+            f"No Plex section found for '{directory}'. "
+            f"Path does not match any configured Plex library root. "
+            f"Available roots: {available_roots}"
+        )
 
     def _find_section_id(self, directory: PlexPath) -> int:
         """

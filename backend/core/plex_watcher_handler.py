@@ -150,10 +150,22 @@ class PlexWatcherHandler(watchdog.events.FileSystemEventHandler):
             
         # Handle deleted files
         if self._is_valid_file(path):
-            # Use validate=False for deleted files since they no longer exist
-            remote_path = PlexPath(self.scanner._roots, Path(path).resolve(), validate=False)
-            # Pass deleted=True to avoid filesystem checks
-            self._handle_event(path, "DELETED", self.scanner.get_type(remote_path, deleted=True))
+            try:
+                # Use validate=False for deleted files since they no longer exist
+                remote_path = PlexPath(self.scanner._roots, Path(path).resolve(), validate=False)
+                # Pass deleted=True to avoid filesystem checks
+                media_type = self.scanner.get_type(remote_path, deleted=True)
+                self._handle_event(path, "DELETED", media_type)
+            except Exception as e:
+                logger.error(f"Error handling deleted file '{path}': {e}")
+                logger.debug(f"Attempting to scan parent directory for '{path}'")
+                # Try scanning the parent directory as a fallback
+                try:
+                    parent_path = PlexPath(self.scanner._roots, Path(path).parent.resolve(), validate=False)
+                    media_type = self.scanner.get_type(parent_path, deleted=True)
+                    self._handle_event(str(Path(path).parent), "DELETED (parent)", media_type)
+                except Exception as parent_error:
+                    logger.error(f"Failed to handle deletion via parent directory: {parent_error}")
 
         return super().on_deleted(event)
 

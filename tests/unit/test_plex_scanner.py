@@ -240,3 +240,44 @@ class TestPlexScannerDeletedPaths:
         movie_section = mock_roots[1][1]
         movie_section.update.assert_called_once()
 
+    def test_get_type_deleted_path_no_section_match(
+        self, mock_plex_with_sections, mock_roots, temp_dir
+    ):
+        """Test getting type for deleted path when section matching fails."""
+        scanner = PlexScanner(mock_plex_with_sections)
+        scanner._roots = mock_roots
+
+        # Create a path that won't match any section
+        # Use an absolute path outside the temp directory structure
+        if temp_dir.drive:
+            # Windows
+            outside_path = Path(temp_dir.drive) / "completely" / "different" / "path" / "movie.mkv"
+        else:
+            # Unix-like
+            outside_path = Path("/completely/different/path/movie.mkv")
+        
+        plex_path = PlexPath(mock_roots, outside_path, validate=False)
+
+        # Should fall back to heuristics and not crash
+        media_type = scanner.get_type(plex_path, deleted=True)
+        assert media_type in ["movie", "show"]
+
+    def test_get_type_deleted_show_heuristic_fallback(
+        self, mock_plex_with_sections, mock_roots, temp_dir
+    ):
+        """Test that Season folder detection works even when section matching fails."""
+        scanner = PlexScanner(mock_plex_with_sections)
+        scanner._roots = mock_roots
+
+        # Create a path with Season folder but outside known roots
+        if temp_dir.drive:
+            outside_path = Path(temp_dir.drive) / "other" / "TV Show" / "Season 1" / "episode.mkv"
+        else:
+            outside_path = Path("/other/TV Show/Season 1/episode.mkv")
+        
+        plex_path = PlexPath(mock_roots, outside_path, validate=False)
+
+        # Should detect as show based on "Season 1" folder
+        media_type = scanner.get_type(plex_path, deleted=True)
+        assert media_type == "show"
+
