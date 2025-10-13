@@ -29,13 +29,46 @@ class PlexScanner:
         for root, sec in self._roots:
             logger.info(f"Found Plex section: '{sec.title}' at {root}")
 
-    def get_type(self, path: PlexPath) -> Literal["movie", "show"]:
+    def get_type(self, path: PlexPath, deleted: bool = False) -> Literal["movie", "show"]:
         """
         Figure out whether a given file/folder belongs to Movies or TV library,
         and return "movie" for a Movies section, or "show" for a TV Shows section.
+        
+        Args:
+            path: The PlexPath to check
+            deleted: If True, the path is deleted and filesystem checks should be avoided
         """
-        # Use PlexPath's methods to check if it's a directory
-        if path.is_dir():
+        # For deleted paths, use heuristics since we can't check the filesystem
+        if deleted:
+            # Try to determine from path structure
+            # Shows typically have "Season X" folders in their path
+            path_str = str(path.path).lower()
+            parts = path.path.parts
+            
+            # Check if any part contains "season" followed by a number
+            for part in parts:
+                part_lower = part.lower()
+                if part_lower.startswith("season") and any(c.isdigit() for c in part_lower):
+                    # This looks like a TV show structure
+                    section = self._find_section(path, allow_deleted=True)
+                    if section and section.type.lower() == "show":
+                        return "show"
+                    # If section says it's a show, trust that
+                    # Otherwise fall through to section check
+                    break
+            
+            # Fall back to section detection (this should work even for deleted paths)
+            section = self._find_section(path, allow_deleted=True)
+            lib_type = section.type.lower()
+            if lib_type == "movie":
+                return "movie"
+            elif lib_type == "show":
+                return "show"
+            else:
+                return "movie"
+        
+        # For existing paths, use filesystem checks
+        if path.exists() and path.is_dir():
             dir_path = path
         else:
             # If it's a file, create PlexPath for its parent
@@ -59,7 +92,14 @@ class PlexScanner:
         section.update(str(plex_path))
         logger.info(f"scanning section '{section.title}' for {plex_path}")
 
-    def _find_section(self, directory: PlexPath):
+    def _find_section(self, directory: PlexPath, allow_deleted: bool = False):
+        """
+        Find the Plex library section for a given directory.
+        
+        Args:
+            directory: The PlexPath to find the section for
+            allow_deleted: If True, skip existence checks (for deleted paths)
+        """
         for plex_root_path, section in self._roots:
             try:
                 directory.path.relative_to(plex_root_path)
