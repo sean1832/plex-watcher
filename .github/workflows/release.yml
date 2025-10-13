@@ -18,6 +18,9 @@ env:
   BACKEND_DIR: "backend"
   FRONTEND_DIR: "frontend"
   BACKEND_VERSION_FILE: "backend/__init__.py"
+  # Artifact names for build outputs
+  BACKEND_ARTIFACT_NAME: "backend-build.whl"
+  FRONTEND_ARTIFACT_NAME: "frontend-build.zip"
 
 jobs:
   # Job 1: Run tests to ensure everything works
@@ -104,11 +107,19 @@ jobs:
           echo "Backend wheel built successfully"
           ls -lh dist/
 
+      - name: Rename backend wheel
+        run: |
+          cd "${{ env.BACKEND_DIR }}/dist"
+          WHEEL_FILE=$(ls *.whl)
+          mv "$WHEEL_FILE" "${{ env.BACKEND_ARTIFACT_NAME }}"
+          echo "Renamed $WHEEL_FILE to ${{ env.BACKEND_ARTIFACT_NAME }}"
+          ls -lh
+
       - name: Upload backend wheel as artifact
         uses: actions/upload-artifact@v4
         with:
           name: backend-wheel
-          path: ${{ env.BACKEND_DIR }}/dist/*.whl
+          path: ${{ env.BACKEND_DIR }}/dist/${{ env.BACKEND_ARTIFACT_NAME }}
           retention-days: 7
 
       # Build SvelteKit frontend (Node adapter)
@@ -138,13 +149,13 @@ jobs:
       - name: Archive frontend build
         run: |
           cd ${{ env.FRONTEND_DIR }}
-          zip -r ../frontend-build.zip build/
+          zip -r ../${{ env.FRONTEND_ARTIFACT_NAME }} build/
 
       - name: Upload frontend build as artifact
         uses: actions/upload-artifact@v4
         with:
           name: frontend-build
-          path: frontend-build.zip
+          path: ${{ env.FRONTEND_ARTIFACT_NAME }}
           retention-days: 7
 
   # Job 3: Upload wheels to GitHub Release
@@ -163,7 +174,7 @@ jobs:
       - name: Upload backend wheel to release
         uses: softprops/action-gh-release@v1
         with:
-          files: ./wheels/backend/*.whl
+          files: ./wheels/backend/${{ env.BACKEND_ARTIFACT_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -176,7 +187,7 @@ jobs:
       - name: Upload frontend build to release
         uses: softprops/action-gh-release@v1
         with:
-          files: ./frontend-release/frontend-build.zip
+          files: ./frontend-release/${{ env.FRONTEND_ARTIFACT_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
