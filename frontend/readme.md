@@ -1,38 +1,41 @@
-# sv
+# Plex-Watcher Frontend
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Frontend application for Plex-Watcher. Built with SvelteKit.
 
-## Creating a project
+## Features
 
-If you're seeing this, you've probably already done this step. Congrats!
+- User-friendly interface to monitor and manage your Plex server.
+- Independent of the backend, allowing for flexible deployment.
+- Manual partial scanning.
 
-```sh
-# create a new project in the current directory
-npx sv create
+## Installation
 
-# create a new project in my-app
-npx sv create my-app
+### Local Deployment
+
+Recommended for LXC containers or local machines for direct deployment without docker.
+Node.js and npm are required.
+
+1. Download latest release
+
+```bash
+VERSION=$(curl -s "https://api.github.com/repos/sean1832/plex-watcher/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+curl -L -O "https://github.com/sean1832/plex-watcher/releases/download/$VERSION/frontend-build.zip"
 ```
 
-## Developing
+2. Unzip the downloaded file
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+```bash
+unzip frontend-build.zip -d plex-watcher-frontend
 ```
 
-## Building
+3. Deploy the contents of the `plex-watcher-frontend` directory to your web server.
 
-To create a production version of your app:
-
-```sh
-npm run build
+```bash
+node plex-watcher-frontend
 ```
 
-You can preview the production build with `npm run preview`.
+> Access the app at `http://0.0.0.0:3000` or `http://localhost:3000` after starting the server.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+### Docker
+Comming soon...
+
