@@ -22,6 +22,11 @@ export class ApiError extends Error {
 		super(message);
 		this.name = 'ApiError';
 	}
+
+	toString() {
+		const parts = [this.message, this.details?.join('; ')].filter(Boolean);
+		return `${this.name}${this.statusCode ? ` ${this.statusCode}` : ''}: ${parts.join(' | ')}`;
+	}
 }
 
 export interface ApiClientConfig {

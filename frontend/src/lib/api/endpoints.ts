@@ -72,13 +72,16 @@ export async function stopWatcher(): Promise<ApiResponse> {
  *
  * @example
  * ```ts
- * await scanPaths(['/movies/New Movie (2024)', '/tv/New Show']);
+ * await scanPaths({ paths: ['/movies', '/tv'], server_url: 'http://localhost:32400', token: 'your-plex-token' });
  * ```
  */
-export async function scanPaths(paths: string[]): Promise<ApiResponse> {
+export async function scanPaths(config: ScanRequest): Promise<ApiResponse> {
+	// Ensure paths array is provided
+	if (!config.paths || config.paths.length === 0) {
+		throw new Error('At least one path must be specified for scanning.');
+	}
 	const client = getApiClient();
-	const request: ScanRequest = { paths };
-	return client.post<ApiResponse>('/scan', request);
+	return client.post<ApiResponse>('/scan', config);
 }
 
 /**

@@ -9,6 +9,8 @@ export interface StartRequest {
 // scan request types
 export interface ScanRequest {
 	paths: string[];
+	server_url: string;
+	token: string;
 }
 
 // get status response types

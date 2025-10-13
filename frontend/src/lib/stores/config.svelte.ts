@@ -272,6 +272,17 @@ function createConfigStore() {
 		},
 
 		/**
+		 * Get scan request payload for given paths
+		 */
+		toScanRequest(paths: string[]) {
+			return {
+				paths: paths,
+				server_url: state.plexServerUrl,
+				token: state.plexToken
+			};
+		},
+
+		/**
 		 * Check if configuration is valid for starting
 		 */
 		isValid(): boolean {
