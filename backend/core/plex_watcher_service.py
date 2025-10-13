@@ -55,7 +55,10 @@ class PlexWatcherService:
         if "server" in config and "token" in config and config["server"] and config["token"]:
             service.configure(config["server"], config["token"], config.get("cooldown", 30))
         for path in config.get("paths", []):
-            service.add_path(path)
+            try:
+                service.add_path(path)
+            except FileNotFoundError as e:
+                logger.error(f"Failed to add path '{path}': {e}")
 
         logger.info("Plex Watcher Service loaded from config.")
         return service
