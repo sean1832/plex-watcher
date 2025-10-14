@@ -11,3 +11,4 @@ config.json
 
 .coverage
 .env
+bin/
