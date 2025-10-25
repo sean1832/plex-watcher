@@ -2,212 +2,217 @@
 
 ## Project Overview
 
-Plex-Watcher is a monorepo containing a Python backend service that monitors filesystem changes and triggers Plex library updates, plus a SvelteKit frontend for web UI control. The backend can run standalone via CLI or as a FastAPI server controlled by the frontend.
+Plex-Watcher is a monorepo containing a **Go backend** service that monitors filesystem changes and triggers Plex library updates, plus a **SvelteKit 5 frontend** for web UI control. The backend runs as an HTTP API server that the frontend communicates with.
 
-## General Instructions
+**Key architectural shift**: This project was recently rewritten from Python to Go. The backend is now a high-performance Go service using native fsnotify for filesystem watching.
 
-- Provide clear, concise code
-- Follow existing code style and conventions
-- Prioritize readability and maintainability
-- Use type hints and docstrings
-- Write modular, testable functions and classes
-- Avoid unnecessary complexity; prefer simple solutions
-- Ensure proper error handling and logging
-- Do not write bunch of .md files after done, just focus on code and tests
+## General Guidelines
 
-## Architecture & Key Concepts
+- Write clear, idiomatic code following language-specific best practices
+- Prioritize simplicity over cleverness
+- Focus on code and tests - avoid generating documentation files unless requested
+- Log appropriately (structured logging for production, descriptive messages for debugging)
 
-### Backend Structure (`backend/`)
+## Architecture & Components
 
-- **Entry points**: `cli.py` (standalone watcher) and `api_server.py` (FastAPI server for frontend)
-- **Core services** (`backend/core/`):
-  - `PlexWatcherService`: Orchestrates observer, handler, and scanner; manages configuration and threading
-  - `PlexWatcherHandler`: Watchdog event handler that queues changes with cooldown-based debouncing (prevents scan spam)
-  - `PlexScanner`: Interacts with Plex API to trigger library updates for specific paths
-  - `PlexPath`: Critical path translation layer - converts between host filesystem paths and Plex container/library paths using fuzzy suffix matching
+### Backend (`backend/` - Go 1.25+)
 
-### Path Translation Pattern
+**Entry point**: `cmd/server/main.go` - HTTP API server on port 8000
 
-**The `PlexPath` class is central to the architecture.** Plex servers often run in Docker with mounted volumes (e.g., `/media/movies` in container vs `/mnt/storage/movies` on host). `PlexPath._convert_to_plex_path()` uses longest-suffix matching to intelligently map host paths to Plex library roots. When working with paths:
+**Core components**:
+- **`internal/api/api.go`**: REST API layer with endpoints for start/stop/scan/status. Uses **semaphore pattern** (`scanSemaphore`) to limit concurrent Plex API calls (default: 4)
+- **`internal/watcher_manager/manager.go`**: Lifecycle manager for filesystem watcher with mutex-protected state
+- **`internal/fs_watcher/fs_watcher.go`**: Filesystem observer using `fsnotify` with **debounce/batching** logic to prevent scan spam during bulk file operations
+- **`internal/plex/scanner.go`**: Orchestrates Plex library scans with intelligent path-to-section matching using **longest-prefix matching**
+- **`internal/plex/path_mapper.go`**: **Critical** - Maps local filesystem paths to Plex server paths using **longest-suffix matching** (handles Docker volume mounts)
+- **`internal/plex/api.go`**: Low-level HTTP client for Plex API (`/library/sections`, `/library/sections/{id}/refresh`)
 
-- Always create `PlexPath` instances for validation before scanning
-- Use `validate=False` only when you trust the input is already a Plex path
-- The `_roots` list (from `PlexScanner._roots`) contains `(Path, LibrarySection)` tuples sorted longest-first
+### Frontend (`frontend/` - SvelteKit 2.x + Svelte 5.x)
 
-### Debouncing & Cooldown Strategy
+- **Framework**: SvelteKit with **Svelte 5 runes** (`$state`, `$derived`, `$effect` - NOT `$:` or stores)
+- **Styling**: Tailwind CSS 4.x + shadcn-svelte components (see `src/lib/components/ui/`)
+- **API Client**: Type-safe wrapper in `src/lib/api/` with `ApiError` class for error handling
+- **State Management**: `src/lib/stores/config.svelte.ts` - reactive config store with localStorage persistence
+- **Current status**: Functional UI with API integration; backend connection status probing implemented
 
-File changes are queued in `PlexWatcherHandler._pending_paths` (set of strings) and scanned after `cooldown` seconds of inactivity. This batches rapid file operations (e.g., copying entire seasons) into single scans per show/movie folder. The timer resets on each new event.
+## Critical Path Translation Logic
 
-### Environment Variables (Docker/Config)
+**Problem**: Plex servers often run in Docker with mounted volumes. Example:
+- Host path: `/mnt/storage/movies/Inception/Inception.mkv`
+- Plex container path: `/media/movies/Inception/Inception.mkv`
 
-- `MEDIA_ROOT`: Base path for relative path resolution in Docker context (default: `/media`)
-- `CONFIG_PATH`: JSON config file location for persistence across restarts (default: `config.json`)
-- `API_HOST`, `API_PORT`: FastAPI server binding (defaults: `0.0.0.0:8000`)
+**Solution (`path_mapper.go`)**: 
+- Uses **longest-suffix matching** on path components (case-insensitive)
+- Splits paths into parts, tries matching last K components of Plex roots against local path
+- Handles nested library structures by trying longest matches first
+- Returns mapped path + matched root, or `ok=false` if no match
 
-### Frontend Structure (`frontend/`)
+**Usage pattern**:
+```go
+plexPath, matchedRoot, ok := scanner.MapToPlexPath(localPath)
+if !ok {
+    log.Printf("path %s does not map to any Plex library", localPath)
+    return
+}
+// Use plexPath for Plex API calls
+```
 
-- **Framework**: SvelteKit 2.x with Svelte 5.x (runes syntax)
-- **Styling**: Tailwind CSS 4.x with Vite plugin
-- **Components**: UI components in `src/lib/components/`, reusable utilities in `src/lib/utils.ts`
-- **Current state**: Minimal skeleton (NavBar with mode toggle); backend API integration not yet implemented
+## Filesystem Watching & Debouncing
 
-## Frontend Plans and Deployment
+**Debounce strategy** (`fs_watcher.go`):
+- Events accumulated in `pending` map (path -> combined ops)
+- Timer resets on each new event during `DebounceWindow` (configurable seconds)
+- Flush triggered after inactivity period expires
+- Prevents spam when copying entire seasons/movie collections
 
-### Svelte-Based Web UI
+**Recursive watching**:
+- When `Recursive: true`, watcher automatically adds new subdirectories via `addRecursive()`
+- Triggered on `fsnotify.Create` events for directories
 
-The frontend will be a SvelteKit-based reactive web UI, designed to be lightweight, efficient, and deployable independently of the backend. Key features include:
+**Event filtering** (`api.go:handleDirUpdate`):
+- Ignores `CHMOD` events (no content change)
+- Logs event type: CREATE/WRITE/REMOVE/RENAME
+- Maps path via `scanner.MapToPlexPath()` before scanning
 
-- **Dashboard**: Displays the current status of the backend server. Users can manually refresh to fetch the latest status (no real-time updates to minimize API calls).
-- **Path Management**: Provides a clear and intuitive interface for adding or removing paths to watch. Users can also manually trigger scans for specific directories.
+## Media Type Detection
 
-### Deployment Preferences
+**TV Show heuristics** (`scanner.go:getMediaTypeForDeleted`):
+1. Scans path parts for "Season X" pattern (case-insensitive)
+2. Verifies digit follows "season" prefix
+3. Strips "Season X" folders via `getShowRootPath()` to scan at show level
+4. Falls back to section type detection or defaults to movie
 
-- **Frontend**: Preferred deployment is via OpenRC in an LXC container for simplicity and performance. Docker deployment is also supported.
-- **Backend**: Preferred deployment is via Docker. Systemd or OpenRC can also be used for environments where Docker is not available.
-
-Both frontend and backend should prioritize:
-
-- Lightweight and efficient design
-- Simplicity and clarity in both UI and architecture
-- High performance, leveraging Svelte's strengths for the frontend
-
-### Authentication
-
-Authentication is not a priority at the moment but will be implemented later. Future updates to the instructions will include details on integrating authentication mechanisms.
+**Why**: Deleted paths can't be checked on disk, so heuristics detect show vs movie structure.
 
 ## Development Workflows
 
 ### Backend Development
 
 ```bash
-# Install in editable mode (from project root)
-pip install -e backend/
+cd backend
 
-# Run CLI directly
-plex-watcher -p /path/to/media -s http://localhost:32400 -t YOUR_TOKEN -i 10
+# Build (creates bin/ directory)
+go build -o bin/ ./...
 
-# Run API server
-plex-watcher-apibackend
-# or: python backend/api_server.py
+# Run server directly
+go run cmd/server/main.go
+# Server listens on 0.0.0.0:8000
 
-# Run tests with coverage
-pytest --cov=backend --cov-report=html
-# View coverage: htmlcov/index.html
+# Run with VS Code task (preferred)
+# Use: Tasks: Run Task > "go: build backend"
+
+# Format and vet
+go fmt ./...
+go vet ./...
+
+# Check dependencies
+go mod tidy
+go mod verify
 ```
+
+**No tests yet** - test files (`*_test.go`) don't exist in this codebase.
 
 ### Frontend Development
 
-```bash
+```powershell
 cd frontend
+
+# Install dependencies
 npm install
-npm run dev          # Dev server at localhost:5173
-npm run build        # Production build
-npm run check        # Type checking with svelte-check
+
+# Dev server (localhost:5173 with HMR)
+npm run dev
+
+# Production build (outputs to build/)
+npm run build
+
+# Preview production build
+npm run preview
+
+# Type checking + linting
+npm run check        # svelte-check for type safety
 npm run lint         # ESLint + Prettier
+npm run format       # Auto-format with Prettier
 ```
 
-### Docker Deployment
+### API Endpoints Reference
 
-```bash
-cd backend
-docker build -t plex-watcher-backend .
-docker-compose up -d
-```
+**Base URL**: `http://localhost:8000`
 
-**Key Docker considerations:**
+| Endpoint | Method | Body | Description |
+|----------|--------|------|-------------|
+| `/` | GET | - | Health check (returns `{"status": "ok"}`) |
+| `/status` | GET | - | Returns watcher status |
+| `/prob-plex` | GET | `ListSectionsRequest` | Lists all Plex library sections |
+| `/start` | POST | `StartRequest` | Start watching with config |
+| `/stop` | POST | - | Stop watcher |
+| `/scan` | POST | `ScanRequest` | Manually trigger scan for paths |
 
-- `user: "1036:100"` must match host UID:GID for file access permissions
-- Mount media as `:ro` (read-only) for safety
-- `MEDIA_ROOT` environment variable determines path resolution base
-
-## Testing Conventions
-
-### Test Structure
-
-- **Unit tests** (`tests/unit/`): Mock external dependencies (Plex API, filesystem)
-- **Integration tests** (`tests/integration/`): Test full workflows with real filesystem fixtures
-- **Fixtures** (`tests/conftest.py`): Shared mocks (`mock_plex_server`, `mock_movie_section`, `mock_roots`) and temp directories
-
-### Key Testing Patterns
-
-```python
-# Always use mock_roots fixture for PlexPath tests
-def test_path_conversion(mock_roots, sample_movie_structure):
-    movie_file = sample_movie_structure / "Inception" / "Inception.mkv"
-    plex_path = PlexPath(mock_roots, movie_file)
-    assert plex_path.exists()
-
-# Mock PlexServer API calls to avoid real network requests
-@pytest.fixture
-def mock_plex_server():
-    server = Mock(spec=PlexServer)
-    server._baseurl = "http://localhost:32400"
-    # ... setup library sections
-```
-
-### Running Tests
-
-```bash
-pytest                          # All tests
-pytest tests/unit/              # Unit tests only
-pytest -m integration           # Integration tests only
-pytest -k "test_path"           # Pattern matching
-pytest --cov-report=term-missing  # Show uncovered lines
+**Request types** (see `backend/internal/requests/requests.go`):
+```go
+type StartRequest struct {
+    ServerUrl string   `json:"server_url"`
+    Token     string   `json:"token"`
+    Paths     []string `json:"paths"`
+    Cooldown  int      `json:"cooldown"` // debounce seconds
+}
 ```
 
 ## Code Conventions
 
-### Python
+### Go Backend
 
-- **Logging**: Use `backend.logger` (already configured in `__init__.py`), not print statements
-- **Type hints**: Required for function signatures (see `PlexScanner.get_type() -> Literal["movie", "show"]`)
-- **Error handling**: Raise specific exceptions with context (e.g., `ValueError(f"No Plex section found for '{directory}'")`)
-- **Threading**: Use locks (`threading.Lock`) when accessing shared state (see `PlexWatcherHandler._lock`, `PlexWatcherService._lock`)
+- **Error handling**: Return errors with context using `fmt.Errorf("action failed: %w", err)`
+- **Logging**: Use `log.Printf()` with descriptive messages (TODO: structured logging not yet implemented)
+- **Concurrency**: Use mutexes (`sync.Mutex`) for shared state (see `Manager.mutex`, `api.scanSemaphore`)
+- **HTTP responses**: Use `writeJSON()` helper in `api.go` for consistent JSON output
+- **Path normalization**: Always use `filepath.Clean()` before comparisons
 
-### Frontend (Svelte 5)
+### Svelte 5 Frontend
 
-- **Runes syntax**: Use `$state`, `$derived`, `$effect` for reactivity (not `$:` or stores)
-- **Component structure**: Script tag first, then markup, then styles
-- **Styling**: Use Tailwind utility classes; custom components in `src/lib/components/ui/`
-- **Imports**: Use `$lib` alias for lib imports (e.g., `import { foo } from '$lib/utils'`)
+- **Runes syntax**: `$state` (reactive vars), `$derived` (computed), `$effect` (side effects)
+- **Component structure**: `<script>` → markup → `<style>` (if needed)
+- **API calls**: Use `src/lib/api/endpoints.ts` functions, not raw fetch
+- **Error handling**: Catch `ApiError` instances, display via toast (svelte-sonner)
+- **Imports**: Use `$lib` alias: `import { config } from '$lib/stores/config.svelte'`
 
-### Styling with shadcn-svelte
+### TypeScript Types Sync
 
-For UI components, this project uses `shadcn-svelte` for consistent and reusable styling. All components should follow this pattern to maintain a cohesive design system. For example:
-
-- Use `shadcn-svelte` components for buttons, toggles, and other interactive elements.
-- Ensure that custom components extend or integrate with `shadcn-svelte` styles where applicable.
-
-Refer to the `ModeToggle.svelte` component in `src/lib/components/ui/button/` for an example of how to implement this styling approach.
-
-## API Design (FastAPI Backend)
-
-### Current Endpoints
-
-- `GET /status`: Returns watcher state (is_watching, paths, server, cooldown)
-- `POST /start`: Configure and start watcher (params: server_url, token, interval)
-- `POST /stop`: Stop watching
-- `POST /add_path` / `POST /remove_path`: Manage watched directories
-- `POST /scan`: Manually trigger scan for specific paths (accepts `ScanRequest` with path list)
-
-### Adding New Endpoints
-
-1. Define Pydantic models for request bodies (see `ScanRequest`)
-2. Add route to `router()` function in `api_server.py`
-3. Use `service.method()` to interact with `PlexWatcherService`
-4. Return consistent JSON: `{"status": "success/error", "message": "...", "details": [...]}`
+Keep frontend types (`frontend/src/lib/types/requests.ts`) in sync with Go structs (`backend/internal/requests/requests.go`). Note JSON naming:
+- Go: `ServerUrl string \`json:"server_url"\``
+- TS: `server_url: string`
 
 ## Common Gotchas
 
-1. **Path resolution in Docker**: Always test path mappings with `PlexPath` - suffix matching can fail if Plex library roots overlap
-2. **Cooldown timing**: Lower cooldown = faster scans but more CPU; typical range 5-30s
-3. **Allowed extensions**: Only files matching `ALLOWED_EXTENSIONS` in `consts.py` trigger scans
-4. **Section type detection**: `PlexScanner.get_type()` determines movie vs show; affects how `_get_media_root()` calculates scan paths (shows strip "Season X" folder)
-5. **Frontend-backend integration**: Not yet implemented - API calls, state management, and error handling need to be added
+1. **Path mapping failures**: If `MapToPlexPath()` returns `ok=false`, the local path doesn't match any Plex library root. Verify Plex sections via `/prob-plex` endpoint.
 
-## Key Files Reference
+2. **Concurrent scan limits**: API enforces max 4 concurrent scans via semaphore. Additional scans block until slots available - prevents overwhelming Plex server.
 
-- `backend/core/plex_path.py`: Path translation logic (150+ lines, complex suffix matching)
-- `backend/core/plex_watcher_handler.py`: Event handling and debouncing (150+ lines)
-- `tests/conftest.py`: Test fixtures and mocks (140+ lines)
-- `backend/docker-compose.yml`: Deployment configuration with volume mounts and env vars
+3. **Debounce timing**: Low `cooldown` (< 5s) causes rapid scans during bulk operations. Typical range: 10-30 seconds.
+
+4. **Recursive watching overhead**: Watching large directory trees (thousands of subdirs) can consume significant memory with fsnotify. Consider watching parent directories only.
+
+5. **CORS not implemented**: TODO in `cmd/server/main.go` - frontend must run on same origin or use proxy during development.
+
+6. **Case sensitivity**: Path matching in `path_mapper.go` is case-insensitive (uses `strings.ToLower`), but filesystem operations respect OS case sensitivity.
+
+## Key Files to Understand
+
+- `backend/internal/plex/path_mapper.go` (140 lines): Suffix matching algorithm with sliding window
+- `backend/internal/fs_watcher/fs_watcher.go` (270 lines): Debounce logic and recursive watching
+- `backend/internal/plex/scanner.go` (257 lines): Section matching and TV show path normalization
+- `frontend/src/lib/api/client.ts` (198 lines): API error handling and timeout management
+- `frontend/src/lib/stores/config.svelte.ts` (304 lines): Reactive config with persistence
+
+## Deployment Preferences
+
+- **Backend**: Preferred via Docker (TODO: Dockerfile not yet created). Can run as native binary.
+- **Frontend**: Build with `npm run build`, deploy with Node.js adapter (`node build/index.js`)
+- **LXC/OpenRC**: Alternative deployment for lightweight containers (see frontend README)
+- **No authentication**: Currently open API - authentication planned for future
+
+## TODO Items
+
+From code grep:
+- `cmd/server/main.go:10`: Implement CORS middleware
+- No test files exist yet - consider adding `*_test.go` files for critical paths
