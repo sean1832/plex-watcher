@@ -14,7 +14,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-type API struct {
+type api struct {
 	Watcher *watcher_manager.Manager
 	Context context.Context
 
@@ -23,26 +23,26 @@ type API struct {
 }
 
 // NewAPI creates a new API instance with the specified concurrency limit for scans.
-func NewAPI(ctx context.Context, concurrency int) *API {
+func NewAPI(ctx context.Context, concurrency int) *api {
 	if concurrency <= 0 {
 		concurrency = 1 // at least 1
 		log.Printf("concurrency must be at least 1, defaulting to 1")
 	}
-	return &API{
+	return &api{
 		Watcher:       watcher_manager.NewManager(),
 		Context:       ctx,
 		scanSemaphore: make(chan struct{}, concurrency), // limit to specified concurrent scans
 	}
 }
 
-func (api *API) Root(w http.ResponseWriter, r *http.Request) {
+func (api *api) Root(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status": "ok", "message": "Plex Watcher API is running"}`))
 }
 
 // GetStatus returns the current status of the watcher
-func (api *API) GetStatus(w http.ResponseWriter, r *http.Request) {
+func (api *api) GetStatus(w http.ResponseWriter, r *http.Request) {
 	running := api.Watcher.Status()
 	status := "stopped"
 	if running {
@@ -53,7 +53,7 @@ func (api *API) GetStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (api *API) ProbPlex(w http.ResponseWriter, r *http.Request) {
+func (api *api) ProbPlex(w http.ResponseWriter, r *http.Request) {
 	// list plex sections
 	if r.Body == nil {
 		http.Error(w, "missing request body", http.StatusBadRequest)
@@ -88,7 +88,7 @@ func (api *API) ProbPlex(w http.ResponseWriter, r *http.Request) {
 }
 
 // Start the watcher with provided configuration
-func (api *API) Start(w http.ResponseWriter, r *http.Request) {
+func (api *api) Start(w http.ResponseWriter, r *http.Request) {
 	var req requests.StartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -118,7 +118,7 @@ func (api *API) Start(w http.ResponseWriter, r *http.Request) {
 }
 
 // Stop the watcher
-func (api *API) Stop(w http.ResponseWriter, r *http.Request) {
+func (api *api) Stop(w http.ResponseWriter, r *http.Request) {
 	if err := api.Watcher.Stop(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -129,7 +129,7 @@ func (api *API) Stop(w http.ResponseWriter, r *http.Request) {
 }
 
 // Manually trigger stateless a scan for specified paths
-func (api *API) Scan(w http.ResponseWriter, r *http.Request) {
+func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 	var req requests.ScanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -172,7 +172,7 @@ func (api *API) Scan(w http.ResponseWriter, r *http.Request) {
 // plex-watcher action
 // ====================
 
-func (api *API) handleDirUpdate(e fs_watcher.Event) {
+func (api *api) handleDirUpdate(e fs_watcher.Event) {
 	if e.Err != nil {
 		log.Printf("watcher error: %v", e.Err)
 		return
