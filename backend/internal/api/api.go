@@ -52,6 +52,7 @@ func (api *api) GetStatus(w http.ResponseWriter, r *http.Request) {
 	if running {
 		status = "running"
 	}
+	log.Printf("Plex watcher status: %s", status)
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": status,
 	})
@@ -83,6 +84,8 @@ func (api *api) ProbPlex(w http.ResponseWriter, r *http.Request) {
 
 	sections := scanner.GetAllSections()
 
+	log.Printf("Plex server at %s has %d library sections", req.ServerUrl, len(sections))
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -111,16 +114,20 @@ func (api *api) Start(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// log all root sections
+	log.Println("============== Plex Library Sections ==============")
 	for _, section := range api.scanner.GetAllSections() {
 		log.Printf("Plex section: '%s' (%s) at %s",
 			section.SectionTitle, section.SectionType, section.RootPath)
 	}
+	log.Println("===================================================")
 
 	// start watcher
 	if err := api.Watcher.Start(req, api.handleDirUpdate); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	log.Printf("Plex watcher started. [dirs=%v, cooldown=%ds]", req.Paths, req.Cooldown)
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": "started",
@@ -133,6 +140,7 @@ func (api *api) Stop(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	log.Println("Plex watcher stopped.")
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": "stopped",
 	})
