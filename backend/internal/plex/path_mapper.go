@@ -57,6 +57,10 @@ func mapToPlexPath(localPath string, plexRoots []string) (mapped string, matched
 	mapped = filepath.Join(append([]string{
 		filepath.Clean(bestRoot),
 	}, bestChildren...)...)
+
+	// normalize to forward slashes for Plex compatibility (Plex expects Unix-style paths)
+	mapped = filepath.ToSlash(mapped)
+
 	return mapped, bestRoot, true
 }
 
