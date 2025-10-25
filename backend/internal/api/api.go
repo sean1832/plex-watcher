@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"path/filepath"
 
 	"plex-watcher-backend/internal/fs_watcher"
 	"plex-watcher-backend/internal/plex"
@@ -158,6 +159,8 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 			log.Printf("path %s does not map to any Plex library path, skipping scan", path)
 			continue
 		}
+		targetDir := filepath.Dir(plexPath)     // scan the parent directory
+		targetDir = filepath.ToSlash(targetDir) // normalize to forward slashes for Plex
 
 		go func(p string, s *plex.Scanner) {
 			api.scanSemaphore <- struct{}{}        // acquire a token
@@ -167,7 +170,7 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 			} else {
 				log.Printf("scan completed for %s", p)
 			}
-		}(plexPath, scanner)
+		}(targetDir, scanner)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": "scan triggered",
@@ -215,20 +218,22 @@ func (api *api) handleDirUpdate(e fs_watcher.Event) {
 		log.Printf("path %s does not map to any Plex library path, skipping scan", e.Path)
 		return
 	}
+	targetDir := filepath.Dir(plexPath)     // scan the parent directory
+	targetDir = filepath.ToSlash(targetDir) // normalize to forward slashes for Plex
 
-	log.Printf("[%s] %s", eventType, plexPath)
+	log.Printf("[%s] %s", eventType, targetDir)
 
 	// trigger plex scan
-	go func(path string) {
+	go func(p string) {
 		api.scanSemaphore <- struct{}{}        // acquire a token
 		defer func() { <-api.scanSemaphore }() // release the token
 
-		if err := api.scanner.ScanPath(api.Context, plexPath); err != nil {
-			log.Printf("failed to scan path %s: %v", plexPath, err)
+		if err := api.scanner.ScanPath(api.Context, p); err != nil {
+			log.Printf("failed to scan path %s: %v", p, err)
 		} else {
-			log.Printf("scan triggered for path: %s", plexPath)
+			log.Printf("scan triggered for path: %s", p)
 		}
-	}(e.Path)
+	}(targetDir)
 }
 
 // ===================
