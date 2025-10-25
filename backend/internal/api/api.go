@@ -24,6 +24,10 @@ type API struct {
 
 // NewAPI creates a new API instance with the specified concurrency limit for scans.
 func NewAPI(ctx context.Context, concurrency int) *API {
+	if concurrency <= 0 {
+		concurrency = 1 // at least 1
+		log.Printf("concurrency must be at least 1, defaulting to 1")
+	}
 	return &API{
 		Watcher:       watcher_manager.NewManager(),
 		Context:       ctx,
