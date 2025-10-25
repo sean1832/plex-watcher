@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"plex-watcher-backend/internal/fs_watcher"
 	"plex-watcher-backend/internal/plex"
@@ -19,20 +20,22 @@ type api struct {
 	Watcher *watcher_manager.Manager
 	Context context.Context
 
-	scanner       *plex.Scanner
-	scanSemaphore chan struct{} // limit concurrent scans
+	scanner           *plex.Scanner
+	scanSemaphore     chan struct{} // limit concurrent scans
+	allowedExtensions []string
 }
 
 // NewAPI creates a new API instance with the specified concurrency limit for scans.
-func NewAPI(ctx context.Context, concurrency int) *api {
+func NewAPI(ctx context.Context, concurrency int, allowedExtensions []string) *api {
 	if concurrency <= 0 {
 		concurrency = 1 // at least 1
 		log.Printf("concurrency must be at least 1, defaulting to 1")
 	}
 	return &api{
-		Watcher:       watcher_manager.NewManager(),
-		Context:       ctx,
-		scanSemaphore: make(chan struct{}, concurrency), // limit to specified concurrent scans
+		Watcher:           watcher_manager.NewManager(),
+		Context:           ctx,
+		scanSemaphore:     make(chan struct{}, concurrency), // limit to specified concurrent scans
+		allowedExtensions: allowedExtensions,
 	}
 }
 
@@ -154,6 +157,12 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 	}
 	// trigger scans for each path
 	for _, path := range req.Paths {
+		// Filter: only process paths with allowed extensions
+		ext := strings.ToLower(filepath.Ext(path))
+		if ext == "" || !ensureExtAllowed(path, api.allowedExtensions) {
+			continue
+		}
+
 		plexPath, _, ok := scanner.MapToPlexPath(path)
 		if !ok {
 			log.Printf("path %s does not map to any Plex library path, skipping scan", path)
@@ -165,10 +174,10 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 		go func(p string, s *plex.Scanner) {
 			api.scanSemaphore <- struct{}{}        // acquire a token
 			defer func() { <-api.scanSemaphore }() // release the token
-			if err := s.ScanPath(api.Context, p); err != nil {
+			if section, err := s.ScanPath(api.Context, p); err != nil {
 				log.Printf("scan failed for %s: %v", p, err)
 			} else {
-				log.Printf("scan completed for %s", p)
+				log.Printf("scan completed for '%s': %s", section.SectionTitle, p)
 			}
 		}(targetDir, scanner)
 	}
@@ -184,6 +193,14 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 func (api *api) handleDirUpdate(e fs_watcher.Event) {
 	if e.Err != nil {
 		log.Printf("watcher error: %v", e.Err)
+		return
+	}
+
+	// Filter: only process paths with allowed extensions (skips .txt, .nfo, etc.)
+	// This automatically filters directories since they have no extension
+	ext := strings.ToLower(filepath.Ext(e.Path))
+	if ext == "" || !ensureExtAllowed(e.Path, api.allowedExtensions) {
+		log.Printf("skipping event for path with invalid extension: %s", e.Path)
 		return
 	}
 
@@ -228,10 +245,10 @@ func (api *api) handleDirUpdate(e fs_watcher.Event) {
 		api.scanSemaphore <- struct{}{}        // acquire a token
 		defer func() { <-api.scanSemaphore }() // release the token
 
-		if err := api.scanner.ScanPath(api.Context, p); err != nil {
+		if section, err := api.scanner.ScanPath(api.Context, p); err != nil {
 			log.Printf("failed to scan path %s: %v", p, err)
 		} else {
-			log.Printf("scan triggered for path: %s", p)
+			log.Printf("scan triggered for '%s': %s", section.SectionTitle, p)
 		}
 	}(targetDir)
 }
@@ -244,4 +261,14 @@ func writeJSON(writer http.ResponseWriter, code int, data map[string]string) {
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(code)
 	json.NewEncoder(writer).Encode(data)
+}
+
+func ensureExtAllowed(path string, allowedExts []string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	for _, allowExt := range allowedExts {
+		if ext == allowExt {
+			return true
+		}
+	}
+	return false
 }

@@ -129,21 +129,19 @@ func (s *Scanner) getMediaTypeForDeleted(path string) (MediaType, error) {
 
 // ScanPath triggers a Plex library scan for the specified path.
 // It automatically determines the appropriate section and applies
-func (s *Scanner) ScanPath(ctx context.Context, path string) error {
+func (s *Scanner) ScanPath(ctx context.Context, path string) (*SectionRoot, error) {
 	section, err := s.findSection(path)
 	if err != nil {
-		return fmt.Errorf("failed to scan path: %w", err)
+		return nil, fmt.Errorf("failed to scan path: %w", err)
 	}
 
 	// Trigger the refresh with the specific path
 	pathStr := path
 	err = s.api.ScanSectionPath(ctx, section.SectionKey, &pathStr)
 	if err != nil {
-		return fmt.Errorf("failed to refresh section '%s': %w", section.SectionTitle, err)
+		return nil, fmt.Errorf("failed to refresh section '%s': %w", section.SectionTitle, err)
 	}
-
-	log.Printf("Scanned section '%s' for path: %s", section.SectionTitle, path)
-	return nil
+	return section, nil
 }
 
 // GetScanPath returns the optimal path to scan based on media type.

@@ -11,7 +11,15 @@ import (
 
 func main() {
 	var port int = 8000
-	api := api.NewAPI(context.Background(), 4) // limit to 4 concurrent scans
+	var exts = [...]string{
+		".mp4",
+		".mkv",
+		".avi",
+		".mov",
+		".webm",
+		".vob",
+	}
+	api := api.NewAPI(context.Background(), 4, exts[:])
 
 	mux := http.NewServeMux() // <-- create a new server mux (control the traffic). Request multiplexer
 	mux.HandleFunc("/", api.Root)
