@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 )
 
 // Scanner manages Plex library scanning operations.
@@ -136,16 +135,10 @@ func (s *Scanner) getMediaTypeForDeleted(path string) (MediaType, error) {
 
 // ScanPath triggers a Plex library scan for the specified path.
 // It automatically determines the appropriate section and applies
-// a cooldown period to avoid API rate limits.
-func (s *Scanner) ScanPath(ctx context.Context, path string, cooldown time.Duration) error {
+func (s *Scanner) ScanPath(ctx context.Context, path string) error {
 	section, err := s.findSection(path)
 	if err != nil {
 		return fmt.Errorf("failed to scan path: %w", err)
-	}
-
-	// Apply cooldown to avoid rate limits
-	if cooldown > 0 {
-		time.Sleep(cooldown)
 	}
 
 	// Trigger the refresh with the specific path

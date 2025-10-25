@@ -27,9 +27,18 @@ type PlexClient struct {
 
 // NewPlexClient creates a new PlexClient with the given base URL and token.
 func NewPlexClient(base, token string) (*PlexClient, error) {
+	if base == "" {
+		return nil, fmt.Errorf("base URL is empty")
+	}
+
 	parsedURL, err := url.Parse(base)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL: %w", err)
+	}
+
+	// Ensure we have a scheme and host after parsing
+	if parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return nil, fmt.Errorf("invalid base URL, missing scheme or host: %s", base)
 	}
 	return &PlexClient{
 		BaseURL: parsedURL,
@@ -126,11 +135,6 @@ func (pc *PlexClient) ListSections(ctx context.Context) ([]SectionRoot, error) {
 			RootPath:     rootPath,
 		})
 	}
-	jsonData, err := json.Marshal(resData)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println(string(jsonData))
 
 	return sections, nil
 }
