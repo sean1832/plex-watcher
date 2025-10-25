@@ -48,12 +48,6 @@ func NewScanner(ctx context.Context, api PlexAPI) (*Scanner, error) {
 		return len(roots[i].RootPath) > len(roots[j].RootPath)
 	})
 
-	// Log discovered sections
-	for _, root := range roots {
-		log.Printf("Found Plex section: '%s' (%s) at %s",
-			root.SectionTitle, root.SectionType, root.RootPath)
-	}
-
 	return &Scanner{
 		api:      api,
 		sections: sectionMap,

@@ -106,6 +106,12 @@ func (api *api) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// log all root sections
+	for _, section := range api.scanner.GetAllSections() {
+		log.Printf("Plex section: '%s' (%s) at %s",
+			section.SectionTitle, section.SectionType, section.RootPath)
+	}
+
 	// start watcher
 	if err := api.Watcher.Start(req, api.handleDirUpdate); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
