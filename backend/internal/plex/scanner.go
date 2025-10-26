@@ -24,6 +24,16 @@ type Scanner struct {
 	roots []types.SectionRoot
 }
 
+// ===========
+// Getter
+// ===========
+func (s *Scanner) GetPlexClient() *PlexClient {
+	if s.api == nil {
+		return nil
+	}
+	return s.api.(*PlexClient)
+}
+
 // NewScanner creates a new Scanner instance.
 // It fetches all library sections from the Plex server and builds
 // an optimized lookup structure for path-to-section matching.

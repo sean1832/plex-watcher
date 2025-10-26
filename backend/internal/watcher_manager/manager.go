@@ -78,11 +78,14 @@ func (m *Manager) Stop() error {
 	return err
 }
 
-func (m *Manager) Status() (bool, []string) {
+// Status returns the current status of the watcher
+func (m *Manager) Status() (bool, []string, int) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if !m.running || m.watcher == nil {
-		return false, []string{}
+		return false, []string{}, 0
 	}
-	return m.running, m.watcher.GetConfig().Dirs
+	return m.running, // is running
+		m.watcher.GetConfig().Dirs, // paths being watched
+		int(m.watcher.GetConfig().DebounceWindow.Seconds()) // cooldown in seconds
 }
