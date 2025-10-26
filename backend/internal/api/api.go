@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"plexwatcher/internal/fs_watcher"
 	"plexwatcher/internal/plex"
@@ -22,7 +23,9 @@ type api struct {
 	Context context.Context
 
 	scanner           *plex.Scanner
-	scanSemaphore     chan struct{} // limit concurrent scans
+	scanSemaphore     chan struct{}   // limit concurrent scans
+	activeScansMutex  sync.Mutex      // protect activeScans map
+	activeScans       map[string]bool // track paths currently being scanned
 	allowedExtensions []string
 }
 
@@ -36,6 +39,7 @@ func NewAPI(ctx context.Context, concurrency int, allowedExtensions []string) *a
 		Watcher:           watcher_manager.NewManager(),
 		Context:           ctx,
 		scanSemaphore:     make(chan struct{}, concurrency), // limit to specified concurrent scans
+		activeScans:       make(map[string]bool),            // initialize deduplication map
 		allowedExtensions: allowedExtensions,
 	}
 }
@@ -188,6 +192,9 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// trigger scans for each path
+	uniquePaths := make(map[string]bool) // deduplicate scan paths
+	scanPaths := []string{}
+
 	for _, path := range req.Paths {
 
 		// map to plex path first
@@ -214,6 +221,20 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 		}
 
 		targetDir = filepath.ToSlash(targetDir)
+
+		// Deduplicate: only add if not already in the map
+		if !uniquePaths[targetDir] {
+			uniquePaths[targetDir] = true
+			scanPaths = append(scanPaths, targetDir)
+		} else {
+			log.Printf("duplicate scan path detected and skipped: %s", targetDir)
+		}
+	}
+
+	log.Printf("triggering scans for %d unique paths (from %d requested)", len(scanPaths), len(req.Paths))
+
+	// Now trigger scans for unique paths
+	for _, targetDir := range scanPaths {
 		go func(p string, s *plex.Scanner) {
 			api.scanSemaphore <- struct{}{}        // acquire a token
 			defer func() { <-api.scanSemaphore }() // release the token
@@ -241,7 +262,7 @@ func (api *api) handleDirUpdate(e fs_watcher.Event) {
 	// This automatically filters directories since they have no extension
 	ext := strings.ToLower(filepath.Ext(e.Path))
 	if ext == "" || !ensureExtAllowed(e.Path, api.allowedExtensions) {
-		log.Printf("skipping event for path with invalid extension: %s", e.Path)
+		//log.Printf("skipping event for path with invalid extension: %s", e.Path)
 		return
 	}
 
@@ -281,6 +302,17 @@ func (api *api) handleDirUpdate(e fs_watcher.Event) {
 
 	log.Printf("[%s] %s", eventType, targetDir)
 
+	// Check if this path is already being scanned (deduplication)
+	api.activeScansMutex.Lock()
+	if api.activeScans[targetDir] {
+		//log.Printf("scan already in progress for %s, skipping duplicate", targetDir)
+		api.activeScansMutex.Unlock()
+		return
+	}
+	// Mark this path as being scanned
+	api.activeScans[targetDir] = true
+	api.activeScansMutex.Unlock()
+
 	// trigger plex scan
 	go func(p string) {
 		api.scanSemaphore <- struct{}{}        // acquire a token
@@ -291,6 +323,11 @@ func (api *api) handleDirUpdate(e fs_watcher.Event) {
 		} else {
 			log.Printf("scan triggered for '%s': %s", section.SectionTitle, p)
 		}
+
+		// Remove from active scans when done
+		api.activeScansMutex.Lock()
+		delete(api.activeScans, p)
+		api.activeScansMutex.Unlock()
 	}(targetDir)
 }
 
