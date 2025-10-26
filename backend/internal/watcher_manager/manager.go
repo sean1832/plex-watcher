@@ -67,7 +67,7 @@ func (m *Manager) Stop() error {
 		return errors.New("watcher not running")
 	}
 
-	// cancel user context (if your watcher observes it) and stop the watcher
+	// cancel user context (if watcher observes it) and stop the watcher
 	if m.cancel != nil {
 		m.cancel()
 	}
@@ -78,8 +78,11 @@ func (m *Manager) Stop() error {
 	return err
 }
 
-func (m *Manager) Status() bool {
+func (m *Manager) Status() (bool, []string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	return m.running
+	if !m.running || m.watcher == nil {
+		return false, []string{}
+	}
+	return m.running, m.watcher.GetConfig().Dirs
 }

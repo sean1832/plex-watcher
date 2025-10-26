@@ -21,14 +21,15 @@ type Event struct {
 }
 
 // Handler is called for each event (or error) received from fsnotify.
+// In other words, actions to be taken on each event are defined by the user via this handler.
 type Handler func(Event)
 
 // Config controls plexWatcher behaviour
 type Config struct {
-	Dirs []string
+	Dirs []string `json:"dirs"`
 
 	// Recursive causes the watcher to also watch all subdirs
-	Recursive bool
+	Recursive bool `json:"recursive"`
 
 	// DebounceWindow groups rapid bursts of event into one.
 	// Set to 0 to disable debounce
@@ -73,6 +74,22 @@ func NewPlexWatcher(cfg Config) (*PlexWatcher, error) {
 	return pw, nil
 }
 
+// ====================
+// getters
+// ====================
+
+// GetConfig returns the current configuration of the PlexWatcher.
+func (pw *PlexWatcher) GetConfig() Config {
+	pw.mutex.Lock()
+	defer pw.mutex.Unlock()
+	return pw.cfg
+}
+
+// ====================
+// public functions
+// ====================
+
+// Start begins watching the configured directories.
 func (pw *PlexWatcher) Start(ctx context.Context) error {
 	pw.mutex.Lock()
 	defer pw.mutex.Unlock()
@@ -105,6 +122,7 @@ func (pw *PlexWatcher) Start(ctx context.Context) error {
 	return nil
 }
 
+// Stop stops watching and releases resources.
 func (pw *PlexWatcher) Stop() error {
 	pw.mutex.Lock()
 	if pw.closed {

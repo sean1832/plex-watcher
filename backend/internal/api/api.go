@@ -47,14 +47,15 @@ func (api *api) Root(w http.ResponseWriter, r *http.Request) {
 
 // GetStatus returns the current status of the watcher
 func (api *api) GetStatus(w http.ResponseWriter, r *http.Request) {
-	running := api.Watcher.Status()
+	running, paths := api.Watcher.Status()
 	status := "stopped"
 	if running {
 		status = "running"
 	}
-	log.Printf("Plex watcher status: %s", status)
-	writeJSON(w, http.StatusOK, map[string]string{
+	log.Printf("Plex watcher status: %s, paths: %v", status, paths)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status": status,
+		"paths":  paths,
 	})
 }
 
@@ -89,10 +90,7 @@ func (api *api) ProbPlex(w http.ResponseWriter, r *http.Request) {
 	sections := scanner.GetAllSections()
 
 	log.Printf("Plex server at %s has %d library sections", req.ServerUrl, len(sections))
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":   "ok",
 		"sections": sections,
 	})
@@ -137,7 +135,7 @@ func (api *api) Start(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Plex watcher started. [dirs=%v, cooldown=%ds]", req.Paths, req.Cooldown)
 
-	writeJSON(w, http.StatusOK, map[string]string{
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status": "started",
 	})
 }
@@ -150,7 +148,7 @@ func (api *api) Stop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Println("Plex watcher stopped.")
-	writeJSON(w, http.StatusOK, map[string]string{
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status": "stopped",
 	})
 }
@@ -201,7 +199,7 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 			}
 		}(targetDir, scanner)
 	}
-	writeJSON(w, http.StatusOK, map[string]string{
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status": "scan triggered",
 	})
 }
@@ -277,7 +275,7 @@ func (api *api) handleDirUpdate(e fs_watcher.Event) {
 // Helper functions
 // ===================
 
-func writeJSON(writer http.ResponseWriter, code int, data map[string]string) {
+func writeJSON(writer http.ResponseWriter, code int, data map[string]interface{}) {
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(code)
 	json.NewEncoder(writer).Encode(data)
