@@ -15,7 +15,15 @@ Perfect for Docker deployments where Plex sees different paths than your filesys
 
 ## Quick Start
 
-**Docker (Recommended)**
+**Docker Compose (Recommended)**
+
+see [docker-compose.yml](docker-compose.yml)
+
+```bash
+docker-compose up -d
+```
+
+**Docker**
 ```bash
 docker run -d \
   -p 7788:8080 \
@@ -31,6 +39,13 @@ docker run -d \
 go build -o bin/server ./cmd/server
 ./bin/server  # Listens on :8080
 ```
+
+> [!TIP]
+> You can test if the backend is working after starting it:
+> ```bash
+> curl http://localhost:7788/status
+> ```
+> You should see a JSON response with the watcher's status.
 
 ## API
 
