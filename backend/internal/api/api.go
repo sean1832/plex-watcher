@@ -188,20 +188,31 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 	}
 	// trigger scans for each path
 	for _, path := range req.Paths {
-		// Filter: only process paths with allowed extensions
-		ext := strings.ToLower(filepath.Ext(path))
-		if ext == "" || !ensureExtAllowed(path, api.allowedExtensions) {
-			continue
-		}
 
+		// map to plex path first
 		plexPath, _, ok := scanner.MapToPlexPath(path)
 		if !ok {
 			log.Printf("path %s does not map to any Plex library path, skipping scan", path)
 			continue
 		}
-		targetDir := filepath.Dir(plexPath)     // scan the parent directory
-		targetDir = filepath.ToSlash(targetDir) // normalize to forward slashes for Plex
 
+		ext := strings.ToLower(filepath.Ext(path))
+		var targetDir string
+		if ext == "" {
+			// case 1: no extension, assume it is a dir
+			// use as is
+			targetDir = plexPath
+		} else if ensureExtAllowed(path, api.allowedExtensions) {
+			// case 2: has an allowed extension. Assume it is a valid file.
+			// scan parent directory
+			targetDir = filepath.Dir(plexPath)
+		} else {
+			// case 3: invalid extension. skip.
+			log.Printf("file path %s has disallowed extension %s, skipping scan", path, ext)
+			continue
+		}
+
+		targetDir = filepath.ToSlash(targetDir)
 		go func(p string, s *plex.Scanner) {
 			api.scanSemaphore <- struct{}{}        // acquire a token
 			defer func() { <-api.scanSemaphore }() // release the token
