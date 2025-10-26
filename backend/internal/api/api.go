@@ -71,20 +71,29 @@ func (api *api) GetStatus(w http.ResponseWriter, r *http.Request) {
 
 func (api *api) ProbPlex(w http.ResponseWriter, r *http.Request) {
 	// list plex sections
-	if r.Body == nil {
-		writeError(w, "missing request body", http.StatusBadRequest)
-		log.Println("missing request body")
+	if r.Method != http.MethodGet {
+		writeError(w, "method not allowed, expected GET", http.StatusMethodNotAllowed)
 		return
 	}
-	var req types.RequestListSections
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, err.Error(), http.StatusBadRequest)
-		log.Printf("failed to decode list sections request: %v", err)
+
+	// get URL query param
+	params := r.URL.Query()
+	serverUrl := params.Get("server_url")
+	if serverUrl == "" {
+		writeError(w, "missing 'server_url' query parameter", http.StatusBadRequest)
+		log.Println("missing 'server_url' query parameter")
+		return
+	}
+
+	token := params.Get("token")
+	if token == "" {
+		writeError(w, "missing 'token' query parameter", http.StatusBadRequest)
+		log.Println("missing 'token' query parameter")
 		return
 	}
 
 	// create plex client
-	plexClient, err := plex.NewPlexClient(req.ServerUrl, req.Token)
+	plexClient, err := plex.NewPlexClient(serverUrl, token)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusBadRequest)
 		log.Printf("failed to create Plex client: %v", err)
@@ -99,7 +108,7 @@ func (api *api) ProbPlex(w http.ResponseWriter, r *http.Request) {
 
 	sections := scanner.GetAllSections()
 
-	log.Printf("Plex server at %s has %d library sections", req.ServerUrl, len(sections))
+	log.Printf("Plex server at %s has %d library sections", serverUrl, len(sections))
 
 	writeSuccess(w, "success hitting plex server & retreived library sections", sections, http.StatusOK)
 }

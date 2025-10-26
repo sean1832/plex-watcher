@@ -12,8 +12,3 @@ type RequestScan struct {
 	Token     string   `json:"token"`
 	Paths     []string `json:"paths"`
 }
-
-type RequestListSections struct {
-	ServerUrl string `json:"server_url"`
-	Token     string `json:"token"`
-}
