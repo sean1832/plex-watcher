@@ -1,19 +1,19 @@
-package requests
+package types
 
-type StartRequest struct {
+type RequestStart struct {
 	ServerUrl string   `json:"server_url"`
 	Token     string   `json:"token"`
 	Paths     []string `json:"paths"`
 	Cooldown  int      `json:"cooldown"` // seconds; used as debounce
 }
 
-type ScanRequest struct {
+type RequestScan struct {
 	ServerUrl string   `json:"server_url"`
 	Token     string   `json:"token"`
 	Paths     []string `json:"paths"`
 }
 
-type ListSectionsRequest struct {
+type RequestListSections struct {
 	ServerUrl string `json:"server_url"`
 	Token     string `json:"token"`
 }

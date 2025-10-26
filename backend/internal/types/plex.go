@@ -1,4 +1,4 @@
-package plex
+package types
 
 // =================================
 // media types

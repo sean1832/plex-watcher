@@ -10,7 +10,7 @@ import (
 
 	"plex-watcher-backend/internal/fs_watcher"
 	"plex-watcher-backend/internal/plex"
-	"plex-watcher-backend/internal/requests"
+	"plex-watcher-backend/internal/types"
 	"plex-watcher-backend/internal/watcher_manager"
 
 	"github.com/fsnotify/fsnotify"
@@ -66,7 +66,7 @@ func (api *api) ProbPlex(w http.ResponseWriter, r *http.Request) {
 		log.Println("missing request body")
 		return
 	}
-	var req requests.ListSectionsRequest
+	var req types.RequestListSections
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		log.Printf("failed to decode list sections request: %v", err)
@@ -98,7 +98,7 @@ func (api *api) ProbPlex(w http.ResponseWriter, r *http.Request) {
 
 // Start the watcher with provided configuration
 func (api *api) Start(w http.ResponseWriter, r *http.Request) {
-	var req requests.StartRequest
+	var req types.RequestStart
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		log.Printf("failed to decode start request: %v", err)
@@ -155,7 +155,7 @@ func (api *api) Stop(w http.ResponseWriter, r *http.Request) {
 
 // Manually trigger stateless a scan for specified paths
 func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
-	var req requests.ScanRequest
+	var req types.RequestScan
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		log.Printf("failed to decode scan request: %v", err)

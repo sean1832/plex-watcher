@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"plex-watcher-backend/internal/fs_watcher"
-	"plex-watcher-backend/internal/requests"
+	"plex-watcher-backend/internal/types"
 	"sync"
 	"time"
 )
@@ -22,7 +22,7 @@ func NewManager() *Manager {
 	}
 }
 
-func (m *Manager) Start(req requests.StartRequest, handler func(fs_watcher.Event)) error {
+func (m *Manager) Start(req types.RequestStart, handler func(fs_watcher.Event)) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
