@@ -111,7 +111,7 @@ export async function testBackendConnection(): Promise<boolean> {
 export async function testPlexConnection(_serverUrl: string, _token: string): Promise<boolean> {
 	const client = getApiClient();
 	const param = new URLSearchParams({ server_url: _serverUrl, token: _token });
-	const endpoint = `/plex_test?${param.toString()}`;
+	const endpoint = `/prob-plex?${param.toString()}`;
 	try {
 		const isConnected = await client.get<boolean>(endpoint);
 		return isConnected;
