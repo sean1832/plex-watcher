@@ -10,6 +10,7 @@ import (
 
 	"plexwatcher/internal/fs_watcher"
 	"plexwatcher/internal/plex"
+	"plexwatcher/internal/response"
 	"plexwatcher/internal/types"
 	"plexwatcher/internal/watcher_manager"
 
@@ -66,13 +67,13 @@ func (api *api) GetStatus(w http.ResponseWriter, r *http.Request) {
 		Server:     serverURL,
 		Cooldown:   cooldown,
 	}
-	writeSuccess(w, "success retrieving status", resp, http.StatusOK)
+	response.WriteSuccess(w, "success retrieving status", resp, http.StatusOK)
 }
 
 func (api *api) ProbPlex(w http.ResponseWriter, r *http.Request) {
 	// list plex sections
 	if r.Method != http.MethodGet {
-		writeError(w, "method not allowed, expected GET", http.StatusMethodNotAllowed)
+		response.WriteError(w, "method not allowed, expected GET", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -80,14 +81,14 @@ func (api *api) ProbPlex(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
 	serverUrl := params.Get("server_url")
 	if serverUrl == "" {
-		writeError(w, "missing 'server_url' query parameter", http.StatusBadRequest)
+		response.WriteError(w, "missing 'server_url' query parameter", http.StatusBadRequest)
 		log.Println("missing 'server_url' query parameter")
 		return
 	}
 
 	token := params.Get("token")
 	if token == "" {
-		writeError(w, "missing 'token' query parameter", http.StatusBadRequest)
+		response.WriteError(w, "missing 'token' query parameter", http.StatusBadRequest)
 		log.Println("missing 'token' query parameter")
 		return
 	}
@@ -95,13 +96,13 @@ func (api *api) ProbPlex(w http.ResponseWriter, r *http.Request) {
 	// create plex client
 	plexClient, err := plex.NewPlexClient(serverUrl, token)
 	if err != nil {
-		writeError(w, err.Error(), http.StatusBadRequest)
+		response.WriteError(w, err.Error(), http.StatusBadRequest)
 		log.Printf("failed to create Plex client: %v", err)
 		return
 	}
 	scanner, err := plex.NewScanner(api.Context, plexClient)
 	if err != nil {
-		writeError(w, err.Error(), http.StatusBadRequest)
+		response.WriteError(w, err.Error(), http.StatusBadRequest)
 		log.Printf("failed to create Plex scanner: %v", err)
 		return
 	}
@@ -110,27 +111,27 @@ func (api *api) ProbPlex(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Plex server at %s has %d library sections", serverUrl, len(sections))
 
-	writeSuccess(w, "success hitting plex server & retreived library sections", sections, http.StatusOK)
+	response.WriteSuccess(w, "success hitting plex server & retreived library sections", sections, http.StatusOK)
 }
 
 // Start the watcher with provided configuration
 func (api *api) Start(w http.ResponseWriter, r *http.Request) {
 	var req types.RequestStart
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, err.Error(), http.StatusBadRequest)
+		response.WriteError(w, err.Error(), http.StatusBadRequest)
 		log.Printf("failed to decode start request: %v", err)
 		return
 	}
 	plexClient, err := plex.NewPlexClient(req.ServerUrl, req.Token)
 	if err != nil {
-		writeError(w, err.Error(), http.StatusBadRequest)
+		response.WriteError(w, err.Error(), http.StatusBadRequest)
 		log.Printf("failed to create Plex client: %v", err)
 		return
 	}
 	// initialize scanner
 	api.scanner, err = plex.NewScanner(api.Context, plexClient)
 	if err != nil {
-		writeError(w, err.Error(), http.StatusBadRequest)
+		response.WriteError(w, err.Error(), http.StatusBadRequest)
 		log.Printf("failed to create Plex scanner: %v", err)
 		return
 	}
@@ -145,44 +146,44 @@ func (api *api) Start(w http.ResponseWriter, r *http.Request) {
 
 	// start watcher
 	if err := api.Watcher.Start(req, api.handleDirUpdate); err != nil {
-		writeError(w, err.Error(), http.StatusBadRequest)
+		response.WriteError(w, err.Error(), http.StatusBadRequest)
 		log.Printf("failed to start Plex watcher: %v", err)
 		return
 	}
 
 	log.Printf("Plex watcher started. [dirs=%v, cooldown=%ds]", req.Paths, req.Cooldown)
 
-	writeSuccess(w, "watcher started", nil, http.StatusOK)
+	response.WriteSuccess(w, "watcher started", nil, http.StatusOK)
 }
 
 // Stop the watcher
 func (api *api) Stop(w http.ResponseWriter, r *http.Request) {
 	if err := api.Watcher.Stop(); err != nil {
-		writeError(w, err.Error(), http.StatusInternalServerError)
+		response.WriteError(w, err.Error(), http.StatusInternalServerError)
 		log.Printf("failed to stop Plex watcher: %v", err)
 		return
 	}
 	log.Println("Plex watcher stopped.")
-	writeSuccess(w, "watcher stopped", nil, http.StatusOK)
+	response.WriteSuccess(w, "watcher stopped", nil, http.StatusOK)
 }
 
 // Manually trigger stateless a scan for specified paths
 func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 	var req types.RequestScan
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, err.Error(), http.StatusBadRequest)
+		response.WriteError(w, err.Error(), http.StatusBadRequest)
 		log.Printf("failed to decode scan request: %v", err)
 		return
 	}
 	plexClient, err := plex.NewPlexClient(req.ServerUrl, req.Token)
 	if err != nil {
-		writeError(w, err.Error(), http.StatusBadRequest)
+		response.WriteError(w, err.Error(), http.StatusBadRequest)
 		log.Printf("failed to create Plex client: %v", err)
 		return
 	}
 	scanner, err := plex.NewScanner(api.Context, plexClient)
 	if err != nil {
-		writeError(w, err.Error(), http.StatusBadRequest)
+		response.WriteError(w, err.Error(), http.StatusBadRequest)
 		log.Printf("failed to create Plex scanner: %v", err)
 		return
 	}
@@ -223,7 +224,7 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 			}
 		}(targetDir, scanner)
 	}
-	writeSuccess(w, "scanned triggered", nil, http.StatusOK)
+	response.WriteSuccess(w, "scanned triggered", nil, http.StatusOK)
 }
 
 // ====================
@@ -296,27 +297,6 @@ func (api *api) handleDirUpdate(e fs_watcher.Event) {
 // ===================
 // Helper functions
 // ===================
-
-func writeSuccess(writer http.ResponseWriter, msg string, data any, code int) {
-	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(code)
-	resp := types.ResponseSuccess{
-		Code:    code,
-		Message: msg,
-		Data:    data,
-	}
-	json.NewEncoder(writer).Encode(resp)
-}
-
-func writeError(writer http.ResponseWriter, msg string, code int) {
-	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(code)
-	resp := types.ResponseError{
-		Code:    code,
-		Message: msg,
-	}
-	json.NewEncoder(writer).Encode(resp)
-}
 
 func ensureExtAllowed(path string, allowedExts []string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
