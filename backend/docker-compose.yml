@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  backend:
+    image: sean1832/plexwatcher-backend:latest
+    container_name: plexwatcher-backend
+    ports:
+      - "7788:8080"
+    environment:
+      - CONCURRENCY_LIMIT=10
+      - SUPPORTED_EXTENSIONS=.mp4,.mkv,.avi,.mov,.divx,.mp3,.m4a,.flac,.wma
+    user: "1036:100" # <-- UID:GID. Must match the user running docker on your host system.
+    volumes:
+      # Mount your media directories to watch as read-only
+      - /path/to/your/media:/media:ro # <-- this should be your media root which contains Movies, TV Shows, etc.
+    restart: unless-stopped
+    networks:
+      - plex-watcher-network
+
+networks:
+  plex-watcher-network:
+    driver: bridge
