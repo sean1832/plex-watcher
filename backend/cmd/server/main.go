@@ -5,21 +5,20 @@ import (
 	"log"
 	"net/http"
 	"plexwatcher/internal/api"
+	"strconv"
 )
 
 // TODO: implement middleware CORS
 
 func main() {
-	var port int = 8000
-	var exts = [...]string{
-		".mp4",
-		".mkv",
-		".avi",
-		".mov",
-		".webm",
-		".vob",
-	}
-	api := api.NewAPI(context.Background(), 4, exts[:])
+	port := 8080
+	conf := loadEnv(".env")
+	log.Println("========== SERVER CONFIG ==========")
+	log.Printf("ConcurrencyLimit: %d", conf.Concurrency)
+	log.Printf("SupportedExtensions: %v", conf.Extensions)
+	log.Println("===================================")
+
+	api := api.NewAPI(context.Background(), conf.Concurrency, conf.Extensions)
 
 	mux := http.NewServeMux() // <-- create a new server mux (control the traffic). Request multiplexer
 	mux.HandleFunc("/", api.Root)
@@ -30,5 +29,5 @@ func main() {
 	mux.HandleFunc("POST /scan", api.Scan)
 
 	log.Printf("Server listening to port 0.0.0.0:%v...\n", port)
-	http.ListenAndServe(":8000", mux)
+	http.ListenAndServe(":"+strconv.Itoa(port), mux)
 }
