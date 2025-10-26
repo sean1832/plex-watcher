@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
-	"plex-watcher-backend/internal/types"
+	"plexwatcher/internal/types"
 	"sort"
 	"strings"
 )

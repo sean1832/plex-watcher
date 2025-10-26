@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"plex-watcher-backend/internal/fs_watcher"
-	"plex-watcher-backend/internal/plex"
-	"plex-watcher-backend/internal/types"
-	"plex-watcher-backend/internal/watcher_manager"
+	"plexwatcher/internal/fs_watcher"
+	"plexwatcher/internal/plex"
+	"plexwatcher/internal/types"
+	"plexwatcher/internal/watcher_manager"
 
 	"github.com/fsnotify/fsnotify"
 )

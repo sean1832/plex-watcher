@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"plex-watcher-backend/internal/api"
+	"plexwatcher/internal/api"
 )
 
 // TODO: implement middleware CORS

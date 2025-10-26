@@ -1,4 +1,4 @@
-module plex-watcher-backend
+module plexwatcher
 
 go 1.25.3
 

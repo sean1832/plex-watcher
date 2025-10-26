@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"plex-watcher-backend/internal/types"
+	"plexwatcher/internal/types"
 	"strconv"
 	"time"
 )

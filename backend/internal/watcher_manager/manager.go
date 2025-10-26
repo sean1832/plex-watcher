@@ -3,8 +3,8 @@ package watcher_manager
 import (
 	"context"
 	"errors"
-	"plex-watcher-backend/internal/fs_watcher"
-	"plex-watcher-backend/internal/types"
+	"plexwatcher/internal/fs_watcher"
+	"plexwatcher/internal/types"
 	"sync"
 	"time"
 )
