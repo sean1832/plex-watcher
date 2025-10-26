@@ -72,7 +72,6 @@ func (m *Manager) Stop() error {
 		m.cancel()
 	}
 	err := m.watcher.Stop()
-	m.watcher = nil
 	m.cancel = nil
 	m.running = false
 	return err
@@ -82,7 +81,7 @@ func (m *Manager) Stop() error {
 func (m *Manager) Status() (bool, []string, int) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	if !m.running || m.watcher == nil {
+	if m.watcher == nil {
 		return false, []string{}, 0
 	}
 	return m.running, // is running
