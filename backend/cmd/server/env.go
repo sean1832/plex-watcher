@@ -12,6 +12,7 @@ import (
 type serverConfig struct {
 	Extensions  []string
 	Concurrency int
+	Origins     []string
 }
 
 var defaultExts = []string{
@@ -34,10 +35,12 @@ func loadEnv(envpath string) serverConfig {
 	}
 	concurrency := tryLoadEnvInt("CONCURRENCY_LIMIT", 10)
 	exts := tryLoadEnvStringList("SUPPORTED_EXTENSIONS", defaultExts)
+	origins := tryLoadEnvStringList("ALLOWED_ORIGINS", []string{"*"})
 
 	return serverConfig{
 		Concurrency: concurrency,
 		Extensions:  exts,
+		Origins:     origins,
 	}
 }
 
