@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * API Endpoints - Type-safe functions for all backend API calls
  *
@@ -18,7 +17,10 @@ import type { StartRequest, ScanRequest, StatusResponse } from '$lib/types/reque
  */
 export async function getStatus(): Promise<StatusResponse> {
 	const client = getApiClient();
-	return client.get<StatusResponse>('/status');
+	const response = await client.get<{ code: number; message: string; data: StatusResponse }>(
+		'/status'
+	);
+	return response.data;
 }
 
 /**
@@ -43,7 +45,15 @@ export async function getStatus(): Promise<StatusResponse> {
  */
 export async function startWatcher(config: StartRequest): Promise<ApiResponse> {
 	const client = getApiClient();
-	return client.post<ApiResponse>('/start', config);
+	const response = await client.post<{ code: number; message: string; data?: unknown }>(
+		'/start',
+		config
+	);
+	return {
+		status: response.code >= 200 && response.code < 300 ? 'success' : 'error',
+		message: response.message,
+		data: response.data
+	};
 }
 
 /**
@@ -57,7 +67,12 @@ export async function startWatcher(config: StartRequest): Promise<ApiResponse> {
  */
 export async function stopWatcher(): Promise<ApiResponse> {
 	const client = getApiClient();
-	return client.post<ApiResponse>('/stop');
+	const response = await client.post<{ code: number; message: string; data?: unknown }>('/stop');
+	return {
+		status: response.code >= 200 && response.code < 300 ? 'success' : 'error',
+		message: response.message,
+		data: response.data
+	};
 }
 
 /**
@@ -81,7 +96,15 @@ export async function scanPaths(config: ScanRequest): Promise<ApiResponse> {
 		throw new Error('At least one path must be specified for scanning.');
 	}
 	const client = getApiClient();
-	return client.post<ApiResponse>('/scan', config);
+	const response = await client.post<{ code: number; message: string; data?: unknown }>(
+		'/scan',
+		config
+	);
+	return {
+		status: response.code >= 200 && response.code < 300 ? 'success' : 'error',
+		message: response.message,
+		data: response.data
+	};
 }
 
 /**
@@ -100,21 +123,20 @@ export async function testBackendConnection(): Promise<boolean> {
 /**
  * Test Plex server connectivity
  *
- * Note: This currently tests backend connectivity only.
- * For true Plex server validation, the backend would need a dedicated
- * /test-plex endpoint that validates credentials without starting the watcher.
+ * Tests if the Plex server is reachable and credentials are valid by fetching library sections.
  *
- * @param _serverUrl - Plex server URL (unused, kept for API compatibility)
- * @param _token - Plex authentication token (unused, kept for API compatibility)
- * @returns true if backend is reachable
+ * @param serverUrl - Plex server URL
+ * @param token - Plex authentication token
+ * @returns true if Plex server is reachable and credentials are valid
  */
-export async function testPlexConnection(_serverUrl: string, _token: string): Promise<boolean> {
+export async function testPlexConnection(serverUrl: string, token: string): Promise<boolean> {
 	const client = getApiClient();
-	const param = new URLSearchParams({ server_url: _serverUrl, token: _token });
-	const endpoint = `/prob-plex?${param.toString()}`;
+	const params = new URLSearchParams({ server_url: serverUrl, token: token });
+	const endpoint = `/prob-plex?${params.toString()}`;
 	try {
-		const isConnected = await client.get<boolean>(endpoint);
-		return isConnected;
+		const response = await client.get<{ code: number; message: string; data: unknown }>(endpoint);
+		// Consider it successful if we get a 2xx response with data
+		return response.code >= 200 && response.code < 300 && response.data !== null;
 	} catch (error) {
 		console.error('Plex connection test failed:', error);
 		return false;
