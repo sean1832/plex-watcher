@@ -62,11 +62,13 @@ func (api *api) ProbPlex(w http.ResponseWriter, r *http.Request) {
 	// list plex sections
 	if r.Body == nil {
 		http.Error(w, "missing request body", http.StatusBadRequest)
+		log.Println("missing request body")
 		return
 	}
 	var req requests.ListSectionsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("failed to decode list sections request: %v", err)
 		return
 	}
 
@@ -74,11 +76,13 @@ func (api *api) ProbPlex(w http.ResponseWriter, r *http.Request) {
 	plexClient, err := plex.NewPlexClient(req.ServerUrl, req.Token)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("failed to create Plex client: %v", err)
 		return
 	}
 	scanner, err := plex.NewScanner(api.Context, plexClient)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("failed to create Plex scanner: %v", err)
 		return
 	}
 
@@ -99,17 +103,20 @@ func (api *api) Start(w http.ResponseWriter, r *http.Request) {
 	var req requests.StartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("failed to decode start request: %v", err)
 		return
 	}
 	plexClient, err := plex.NewPlexClient(req.ServerUrl, req.Token)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("failed to create Plex client: %v", err)
 		return
 	}
 	// initialize scanner
 	api.scanner, err = plex.NewScanner(api.Context, plexClient)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("failed to create Plex scanner: %v", err)
 		return
 	}
 
@@ -124,6 +131,7 @@ func (api *api) Start(w http.ResponseWriter, r *http.Request) {
 	// start watcher
 	if err := api.Watcher.Start(req, api.handleDirUpdate); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("failed to start Plex watcher: %v", err)
 		return
 	}
 
@@ -137,7 +145,8 @@ func (api *api) Start(w http.ResponseWriter, r *http.Request) {
 // Stop the watcher
 func (api *api) Stop(w http.ResponseWriter, r *http.Request) {
 	if err := api.Watcher.Stop(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("failed to stop Plex watcher: %v", err)
 		return
 	}
 	log.Println("Plex watcher stopped.")
@@ -151,16 +160,19 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 	var req requests.ScanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("failed to decode scan request: %v", err)
 		return
 	}
 	plexClient, err := plex.NewPlexClient(req.ServerUrl, req.Token)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("failed to create Plex client: %v", err)
 		return
 	}
 	scanner, err := plex.NewScanner(api.Context, plexClient)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("failed to create Plex scanner: %v", err)
 		return
 	}
 	// trigger scans for each path
