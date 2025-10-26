@@ -8,7 +8,23 @@ import (
 	"strconv"
 )
 
-// TODO: implement middleware CORS
+// corsMiddleware adds CORS headers to all responses
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// TODO: Restrict origins in production
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		
+		next.ServeHTTP(w, r)
+	})
+}
 
 func main() {
 	port := 8080
@@ -29,5 +45,5 @@ func main() {
 	mux.HandleFunc("POST /scan", api.Scan)
 
 	log.Printf("Server listening to port 0.0.0.0:%v...\n", port)
-	http.ListenAndServe(":"+strconv.Itoa(port), mux)
+	http.ListenAndServe(":"+strconv.Itoa(port), corsMiddleware(mux))
 }
