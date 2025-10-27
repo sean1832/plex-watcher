@@ -18,7 +18,11 @@ RUN go mod download
 # Copy the rest of the application source code
 COPY . .
 
-RUN go build -ldflags "-s -w" -o /go/bin/app ./cmd/server
+# Build argument for version injection
+ARG VERSION=dev
+
+# Build with version injection
+RUN go build -ldflags "-s -w -X main.Version=${VERSION}" -o /go/bin/app ./cmd/server
 
 # ===================
 # STAGE 2: Minimal runtime image
