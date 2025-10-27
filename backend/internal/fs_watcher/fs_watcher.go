@@ -154,7 +154,6 @@ func (pw *PlexWatcher) run(ctx context.Context) {
 		debounce = pw.cfg.DebounceWindow
 		timer    *time.Timer
 		pending  = make(map[string]fsnotify.Op) // path -> accumulated ops
-		flushCh  = make(chan struct{}, 1)
 	)
 
 	flush := func() {
@@ -170,29 +169,39 @@ func (pw *PlexWatcher) run(ctx context.Context) {
 		pending = make(map[string]fsnotify.Op)
 	}
 
-	// start a helper goroutine to flush when asked
+	// Initialize timer as stopped if debouncing is enabled
 	if debounce > 0 {
-		go func() {
-			for range flushCh {
-				flush()
-			}
-		}()
+		timer = time.NewTimer(debounce)
+		if !timer.Stop() {
+			<-timer.C
+		}
 	}
 
 	for {
 		select {
 		case <-pw.stop:
-			// final flush
-			if debounce > 0 {
-				flush()
-				return
+			// Stop timer and do final flush
+			if timer != nil {
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
 			}
+			flush()
 			return
 		case <-ctx.Done():
-			if debounce > 0 {
-				flush()
-				return
+			// Stop timer and do final flush
+			if timer != nil {
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
 			}
+			flush()
 			return
 		case err, ok := <-pw.watcher.Errors:
 			if !ok {
@@ -222,25 +231,16 @@ func (pw *PlexWatcher) run(ctx context.Context) {
 			pending[event.Name] = combined
 
 			// (re)arm timer
-			if timer == nil {
-				timer = time.NewTimer(debounce)
-			} else {
-				if !timer.Stop() {
-					select {
-					case <-timer.C: // drain if needed
-					default:
-					}
-				}
-				timer.Reset(debounce)
-			}
-
-			go func(t *time.Timer) {
-				<-t.C
+			if !timer.Stop() {
 				select {
-				case flushCh <- struct{}{}:
+				case <-timer.C: // drain if needed
 				default:
 				}
-			}(timer)
+			}
+			timer.Reset(debounce)
+		case <-timer.C:
+			// Timer expired - flush accumulated events
+			flush()
 		}
 	}
 }
