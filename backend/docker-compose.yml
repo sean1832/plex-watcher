@@ -9,6 +9,8 @@ services:
     environment:
       - CONCURRENCY_LIMIT=10
       - SUPPORTED_EXTENSIONS=.mp4,.mkv,.avi,.mov,.divx,.mp3,.m4a,.flac,.wma
+      - ALLOWED_ORIGINS=* # <-- Restrict this to your frontend URL for better security. Using * allows any origin (not recommended for production).
+      - LOG_LEVEL=INFO
     user: "1036:100" # <-- UID:GID. Must match the user running docker on your host system.
     volumes:
       # Mount your media directories to watch as read-only

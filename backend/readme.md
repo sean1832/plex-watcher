@@ -30,6 +30,8 @@ docker run -d \
   -v /path/to/media:/media:ro \
   -e CONCURRENCY_LIMIT=10 \
   -e SUPPORTED_EXTENSIONS=.mp4,.mkv,.avi,.mov \
+  -e ALLOWED_ORIGINS=* \ # you can restrict this to your frontend URL
+  -e LOG_LEVEL=INFO \
   --user 1036:100 \
   sean1832/plexwatcher-backend:latest
 ```
