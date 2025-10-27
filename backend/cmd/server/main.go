@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"plexwatcher/internal/api"
 	"plexwatcher/internal/response"
 	"strconv"
+
+	"github.com/lmittmann/tint"
 )
 
 // corsMiddleware adds CORS headers to all responses
@@ -29,7 +32,7 @@ func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
 		}
 
 		if !allowedOriginsMap[origin] && !allowedOriginsMap["*"] { // '*' allows all
-			log.Printf("Origin '%s' not allowed", origin)
+			slog.Warn("Origin not allowed", "origin", origin)
 			response.WriteError(w, "origin not allowed", http.StatusForbidden)
 			return
 		}
@@ -49,14 +52,41 @@ func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
 	})
 }
 
+// configureLogger sets up the logger with the specified level
+// This can be called multiple times to reconfigure logging
+func configureLogger(level slog.Level) {
+	handler := tint.NewHandler(os.Stdout, &tint.Options{
+		AddSource:  false,
+		Level:      level,
+		TimeFormat: "2006/01/02 15:04:05", // magic date `2006/01/02 15:04:05`
+	})
+
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+}
+
+func init() {
+	// Bootstrap with INFO level - sufficient to log env parsing
+	// Will be reconfigured in main() after reading .env
+	configureLogger(slog.LevelInfo)
+}
+
 func main() {
 	port := 8080
+
+	// Load config from .env (uses bootstrap logger)
 	conf := loadEnv(".env")
-	log.Println("========== SERVER CONFIG ==========")
-	log.Printf("ConcurrencyLimit: %d", conf.Concurrency)
-	log.Printf("SupportedExtensions: %v", conf.Extensions)
-	log.Printf("AllowedOrigins: %v", conf.Origins)
-	log.Println("===================================")
+
+	// Reconfigure logger with level from .env
+	configureLogger(conf.LogLevel)
+
+	slog.Info(
+		"Server started",
+		"log_level", conf.LogLevel.String(),
+		"concurrency", conf.Concurrency,
+		"extensions", conf.Extensions,
+		"origins", conf.Origins,
+	)
 
 	api := api.NewAPI(context.Background(), conf.Concurrency, conf.Extensions)
 
@@ -68,6 +98,6 @@ func main() {
 	mux.HandleFunc("POST /stop", api.Stop)
 	mux.HandleFunc("POST /scan", api.Scan)
 
-	log.Printf("Server listening to port 0.0.0.0:%v ...\n", port)
+	slog.Info("Server listening", "port", port)
 	http.ListenAndServe(":"+strconv.Itoa(port), corsMiddleware(mux, conf.Origins))
 }

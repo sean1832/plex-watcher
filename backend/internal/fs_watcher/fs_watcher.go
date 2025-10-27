@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -37,9 +37,6 @@ type Config struct {
 
 	// Hnadler receives events. Must be non-nil.
 	Handler Handler
-
-	// Logger is used for internal diagnostics. If nil, logs to the standard logger.
-	Logger *log.Logger
 }
 
 type PlexWatcher struct {
@@ -143,14 +140,6 @@ func (pw *PlexWatcher) Stop() error {
 func (pw *PlexWatcher) run(ctx context.Context) {
 	defer pw.waitGroup.Done()
 
-	logf := func(format string, args ...any) {
-		if pw.cfg.Logger != nil {
-			pw.cfg.Logger.Printf(format, args...)
-		} else {
-			log.Printf(format, args...)
-		}
-	}
-
 	var (
 		debounce = pw.cfg.DebounceWindow
 		timer    *time.Timer
@@ -206,7 +195,7 @@ func (pw *PlexWatcher) run(ctx context.Context) {
 			if pw.cfg.Recursive && event.Op&fsnotify.Create == fsnotify.Create {
 				if isDir(event.Name) {
 					if err := pw.addRecursive(event.Name); err != nil {
-						logf("failed to add new subdir %q: %v", event.Name, err)
+						slog.Error("failed to add new subdir", "path", event.Name, "error", err)
 					}
 				}
 			}

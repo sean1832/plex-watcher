@@ -3,7 +3,7 @@ package plex
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"plexwatcher/internal/types"
 	"sort"
@@ -123,7 +123,7 @@ func (s *Scanner) getMediaTypeForDeleted(path string) (types.MediaType, error) {
 	section, err := s.findSection(path)
 	if err != nil {
 		// If we can't find the section, use path heuristics
-		log.Printf("Warning: Could not find section for deleted path '%s', using heuristics", path)
+		slog.Warn("Could not find section for deleted path, using heuristics", "path", path)
 
 		// Additional heuristic: check for any "season" mention in path
 		pathLower := strings.ToLower(normalizedPath)

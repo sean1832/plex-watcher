@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -33,7 +34,7 @@ type api struct {
 func NewAPI(ctx context.Context, concurrency int, allowedExtensions []string) *api {
 	if concurrency <= 0 {
 		concurrency = 1 // at least 1
-		log.Printf("concurrency must be at least 1, defaulting to 1")
+		slog.Warn("concurrency must be at least 1, defaulting to 1")
 	}
 	return &api{
 		Watcher:           watcher_manager.NewManager(),
@@ -57,7 +58,13 @@ func (api *api) GetStatus(w http.ResponseWriter, r *http.Request) {
 	if running {
 		status = "running"
 	}
-	log.Printf("Plex watcher status: %s, paths: %v, cooldown: %ds", status, paths, cooldown)
+
+	slog.Info(
+		"Plex watcher status",
+		slog.String("status", status),
+		slog.Any("paths", paths),
+		slog.Int("cooldown", cooldown),
+	)
 
 	var serverURL *string
 	if api.scanner != nil {
@@ -101,19 +108,19 @@ func (api *api) ProbPlex(w http.ResponseWriter, r *http.Request) {
 	plexClient, err := plex.NewPlexClient(serverUrl, token)
 	if err != nil {
 		response.WriteError(w, err.Error(), http.StatusBadRequest)
-		log.Printf("failed to create Plex client: %v", err)
+		slog.Error("failed to create PlexClient", "error", err)
 		return
 	}
 	scanner, err := plex.NewScanner(api.Context, plexClient)
 	if err != nil {
 		response.WriteError(w, err.Error(), http.StatusBadRequest)
-		log.Printf("failed to create Plex scanner: %v", err)
+		slog.Error("failed to create PlexScanner", "error", err)
 		return
 	}
 
 	sections := scanner.GetAllSections()
 
-	log.Printf("Plex server at %s has %d library sections", serverUrl, len(sections))
+	slog.Info("plex server library section detected", "server", serverUrl, "sections", len(sections))
 
 	response.WriteSuccess(w, "success hitting plex server & retreived library sections", sections, http.StatusOK)
 }
@@ -123,39 +130,43 @@ func (api *api) Start(w http.ResponseWriter, r *http.Request) {
 	var req types.RequestStart
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.WriteError(w, err.Error(), http.StatusBadRequest)
-		log.Printf("failed to decode start request: %v", err)
+		slog.Error("failed to decode start request", "error", err)
 		return
 	}
 	plexClient, err := plex.NewPlexClient(req.ServerUrl, req.Token)
 	if err != nil {
 		response.WriteError(w, err.Error(), http.StatusBadRequest)
-		log.Printf("failed to create Plex client: %v", err)
+		slog.Error("failed to create Plex client", "error", err)
 		return
 	}
 	// initialize scanner
 	api.scanner, err = plex.NewScanner(api.Context, plexClient)
 	if err != nil {
 		response.WriteError(w, err.Error(), http.StatusBadRequest)
-		log.Printf("failed to create Plex scanner: %v", err)
+		slog.Error("failed to create Plex scanner", "error", err)
 		return
 	}
 
 	// log all root sections
-	log.Println("============== Plex Library Sections ==============")
 	for _, section := range api.scanner.GetAllSections() {
-		log.Printf("Plex section: '%s' (%s) at %s",
-			section.SectionTitle, section.SectionType, section.RootPath)
+		slog.Info("Plex section",
+			"title", section.SectionTitle,
+			"type", section.SectionType,
+			"path", section.RootPath,
+		)
 	}
-	log.Println("===================================================")
 
 	// start watcher
 	if err := api.Watcher.Start(req, api.handleDirUpdate); err != nil {
 		response.WriteError(w, err.Error(), http.StatusBadRequest)
-		log.Printf("failed to start Plex watcher: %v", err)
+		slog.Error("failed to start Plex watcher", "error", err)
 		return
 	}
-
-	log.Printf("Plex watcher started. [dirs=%v, cooldown=%ds]", req.Paths, req.Cooldown)
+	slog.Info("plex watcher started.",
+		"server", req.ServerUrl,
+		"dir", req.Paths,
+		"cooldown", req.Cooldown,
+	)
 
 	response.WriteSuccess(w, "watcher started", nil, http.StatusOK)
 }
@@ -164,10 +175,10 @@ func (api *api) Start(w http.ResponseWriter, r *http.Request) {
 func (api *api) Stop(w http.ResponseWriter, r *http.Request) {
 	if err := api.Watcher.Stop(); err != nil {
 		response.WriteError(w, err.Error(), http.StatusInternalServerError)
-		log.Printf("failed to stop Plex watcher: %v", err)
+		slog.Error("failed to stop Plex watcher", "error", err)
 		return
 	}
-	log.Println("Plex watcher stopped.")
+	slog.Info("plex watcher stopped.")
 	response.WriteSuccess(w, "watcher stopped", nil, http.StatusOK)
 }
 
@@ -176,19 +187,19 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 	var req types.RequestScan
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.WriteError(w, err.Error(), http.StatusBadRequest)
-		log.Printf("failed to decode scan request: %v", err)
+		slog.Error("failed to decode scan request", "error", err)
 		return
 	}
 	plexClient, err := plex.NewPlexClient(req.ServerUrl, req.Token)
 	if err != nil {
 		response.WriteError(w, err.Error(), http.StatusBadRequest)
-		log.Printf("failed to create Plex client: %v", err)
+		slog.Error("failed to create Plex client", "error", err)
 		return
 	}
 	scanner, err := plex.NewScanner(api.Context, plexClient)
 	if err != nil {
 		response.WriteError(w, err.Error(), http.StatusBadRequest)
-		log.Printf("failed to create Plex scanner: %v", err)
+		slog.Error("failed to create Plex scanner", "error", err)
 		return
 	}
 	// trigger scans for each path
@@ -200,7 +211,7 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 		// map to plex path first
 		plexPath, section := scanner.MapToPlexPath(path)
 		if section == nil {
-			log.Printf("path %s does not map to any Plex library path, skipping scan", path)
+			slog.Warn("failed to map to any plex library path, skipping scan", "path", path)
 			continue
 		}
 
@@ -216,7 +227,7 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 			targetDir = filepath.Dir(plexPath)
 		} else {
 			// case 3: invalid extension. skip.
-			log.Printf("file path %s has disallowed extension %s, skipping scan", path, ext)
+			slog.Warn("disallowed extension found, skipping scan", "path", path, "extension", ext)
 			continue
 		}
 
@@ -227,11 +238,11 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 			uniquePaths[targetDir] = true
 			scanPaths = append(scanPaths, targetDir)
 		} else {
-			log.Printf("duplicate scan path detected and skipped: %s", targetDir)
+			slog.Debug("duplicate scan path detected and skipped", "path", targetDir)
 		}
 	}
 
-	log.Printf("triggering scans for %d unique paths (from %d requested)", len(scanPaths), len(req.Paths))
+	slog.Info("triggering scans for unique paths", "unique", len(scanPaths), "requested", len(req.Paths))
 
 	// Now trigger scans for unique paths
 	for _, targetDir := range scanPaths {
@@ -239,9 +250,9 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 			api.scanSemaphore <- struct{}{}        // acquire a token
 			defer func() { <-api.scanSemaphore }() // release the token
 			if section, err := s.ScanPath(api.Context, p); err != nil {
-				log.Printf("scan failed for %s: %v", p, err)
+				slog.Error("scan failed", "path", p, "error", err)
 			} else {
-				log.Printf("scan completed for '%s': %s", section.SectionTitle, p)
+				slog.Error("scan completed", "path", p, "section", section.SectionTitle)
 			}
 		}(targetDir, scanner)
 	}
@@ -253,8 +264,10 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 // ====================
 
 func (api *api) handleDirUpdate(e fs_watcher.Event) {
+	logger := slog.With("path", e.Path)
+
 	if e.Err != nil {
-		log.Printf("watcher error: %v", e.Err)
+		logger.Error("watcher error", "error", e.Err)
 		return
 	}
 
@@ -262,18 +275,18 @@ func (api *api) handleDirUpdate(e fs_watcher.Event) {
 	// This automatically filters directories since they have no extension
 	ext := strings.ToLower(filepath.Ext(e.Path))
 	if ext == "" || !ensureExtAllowed(e.Path, api.allowedExtensions) {
-		//log.Printf("skipping event for path with invalid extension: %s", e.Path)
+		logger.Debug("invalid extension, skipping event")
 		return
 	}
 
 	if api.scanner == nil {
-		log.Printf("scanner not initialized, skipping event for %s", e.Path)
+		logger.Warn("scanner not initialized, skipping event")
 		return
 	}
 
 	// ignore CHMOD events (no content change)
 	if e.Op&fsnotify.Chmod == fsnotify.Chmod {
-		log.Printf("[CHMOD] %s (ignored)", e.Path)
+		logger.Debug("file event ignored.", "event", "CHMOD")
 		return
 	}
 
@@ -294,7 +307,7 @@ func (api *api) handleDirUpdate(e fs_watcher.Event) {
 
 	plexPath, section := api.scanner.MapToPlexPath(e.Path)
 	if section == nil {
-		log.Printf("path %s does not map to any Plex library path, skipping scan", e.Path)
+		logger.Warn("path does not map to any Plex library path, skipping scan")
 		return
 	}
 
@@ -303,20 +316,19 @@ func (api *api) handleDirUpdate(e fs_watcher.Event) {
 		// if show; skip `season x` folder.
 		// show is structured as `title/season x/s01e01.mkv`
 		targetDir = filepath.Dir(filepath.Dir(plexPath))
-		log.Printf("path is show. targetDir: %s", targetDir)
+		logger.Debug("Path identified as show.", "scan_target", targetDir)
 	} else {
 		targetDir = filepath.Dir(plexPath) // scan the parent directory
-		log.Printf("path is movie. targetDir: %s", targetDir)
+		logger.Debug("Path identified as movie.", "scan_target", targetDir)
 	}
 
 	targetDir = filepath.ToSlash(targetDir) // normalize to forward slashes for Plex
 
-	log.Printf("[%s] %s", eventType, targetDir)
+	logger.Info("file event accepted, queuing scan", "scan_target", targetDir, "event", eventType)
 
 	// Check if this path is already being scanned (deduplication)
 	api.activeScansMutex.Lock()
 	if api.activeScans[targetDir] {
-		//log.Printf("scan already in progress for %s, skipping duplicate", targetDir)
 		api.activeScansMutex.Unlock()
 		return
 	}
@@ -330,9 +342,9 @@ func (api *api) handleDirUpdate(e fs_watcher.Event) {
 		defer func() { <-api.scanSemaphore }() // release the token
 
 		if section, err := api.scanner.ScanPath(api.Context, p); err != nil {
-			log.Printf("failed to scan path %s: %v", p, err)
+			slog.Error("scan failed", "scan_target", targetDir, "error", err)
 		} else {
-			log.Printf("scan triggered for '%s': %s", section.SectionTitle, p)
+			slog.Info("scan triggered", "scan_target", targetDir, "section", section.SectionTitle)
 		}
 
 		// Remove from active scans when done

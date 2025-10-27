@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -13,6 +13,7 @@ type serverConfig struct {
 	Extensions  []string
 	Concurrency int
 	Origins     []string
+	LogLevel    slog.Level
 }
 
 var defaultExts = []string{
@@ -31,16 +32,44 @@ var defaultExts = []string{
 func loadEnv(envpath string) serverConfig {
 	err := godotenv.Load(envpath)
 	if err == nil {
-		log.Println("INFO: using .env file as environment variable.")
+		slog.Info("Using .env file as environment variable.")
 	}
 	concurrency := tryLoadEnvInt("CONCURRENCY_LIMIT", 10)
 	exts := tryLoadEnvStringList("SUPPORTED_EXTENSIONS", defaultExts)
 	origins := tryLoadEnvStringList("ALLOWED_ORIGINS", []string{"*"})
+	logLevel := parseLogLevel(os.Getenv("LOG_LEVEL"), slog.LevelInfo)
 
 	return serverConfig{
 		Concurrency: concurrency,
 		Extensions:  exts,
 		Origins:     origins,
+		LogLevel:    logLevel,
+	}
+}
+
+// parseLogLevel converts a string log level to slog.Level
+// Returns defaultLevel if the string is empty or invalid
+func parseLogLevel(levelStr string, defaultLevel slog.Level) slog.Level {
+	if levelStr == "" {
+		return defaultLevel
+	}
+
+	switch strings.ToUpper(strings.TrimSpace(levelStr)) {
+	case "DEBUG":
+		return slog.LevelDebug
+	case "INFO":
+		return slog.LevelInfo
+	case "WARN", "WARNING":
+		return slog.LevelWarn
+	case "ERROR":
+		return slog.LevelError
+	default:
+		slog.Warn(
+			"Invalid log level in env var. Using default.",
+			slog.String("invalid_value", levelStr),
+			slog.String("default_value", defaultLevel.String()),
+		)
+		return defaultLevel
 	}
 }
 
@@ -50,7 +79,13 @@ func tryLoadEnvInt(key string, defaultVal int) int {
 	if valStr != "" {
 		v, err := strconv.Atoi(valStr)
 		if err != nil {
-			log.Printf("Invalid '%s' value '%s'. Using default value '%d'. Error: '%v'", key, valStr, defaultVal, err)
+			slog.Warn(
+				"Invalid integer value for env var. Using default.",
+				slog.String("key", key),
+				slog.String("invalid_value", valStr),
+				slog.Int("default_value", defaultVal),
+				slog.Any("error", err),
+			)
 		} else {
 			result = v
 		}
@@ -73,7 +108,12 @@ func tryLoadEnvStringList(key string, defaultVal []string) []string {
 			}
 		}
 		if len(items) == 0 {
-			log.Printf("'%s' was set but resulted in an empty list. Using default extensions", key)
+			slog.Warn(
+				"Env var was set but resulted in an empty list. Using default.",
+				slog.String("key", key),
+				slog.String("original_value", valStr),
+				slog.Any("default_value", defaultVal),
+			)
 		} else {
 			result = items
 		}
