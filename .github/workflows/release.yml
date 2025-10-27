@@ -180,6 +180,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Download pre-built binaries from Job 1 (much faster than building in Docker)
+      - name: Download backend binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-binaries
+          path: ./${{ env.BACKEND_DIR }}/dist
+
+      # Set up QEMU for cross-platform builds (only needed for base image layers)
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -220,27 +233,22 @@ jobs:
             type=raw,value=rc,enable=${{ contains(steps.version.outputs.version, 'rc') }}
             type=raw,value=alpha,enable=${{ contains(steps.version.outputs.version, 'alpha') }}
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image (using pre-built binaries)
         id: build
         uses: docker/build-push-action@v5
         with:
           context: ./${{ env.BACKEND_DIR }}
-          file: ./${{ env.BACKEND_DIR }}/Dockerfile
+          file: ./${{ env.BACKEND_DIR }}/Dockerfile.prebuilt
           platforms: ${{ matrix.platform }}
           push: true
           labels: ${{ steps.meta.outputs.labels }}
-          # Platform-specific caching for better performance
-          cache-from: |
-            type=registry,ref=${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:buildcache-${{ steps.cache_key.outputs.platform_key }}
-            type=gha,scope=${{ steps.cache_key.outputs.platform_key }}
-          cache-to: |
-            type=registry,ref=${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:buildcache-${{ steps.cache_key.outputs.platform_key }},mode=max
-            type=gha,mode=max,scope=${{ steps.cache_key.outputs.platform_key }}
+          # Minimal caching needed since we're just copying binaries
+          cache-from: type=gha,scope=${{ steps.cache_key.outputs.platform_key }}
+          cache-to: type=gha,mode=max,scope=${{ steps.cache_key.outputs.platform_key }}
           provenance: false
           outputs: type=image,name=${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME_BACKEND }},push-by-digest=true,name-canonical=true,push=true
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
-            BUILDKIT_INLINE_CACHE=1
 
       - name: Export digest
         run: |

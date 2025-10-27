@@ -1,4 +1,11 @@
 # ===================
+# Standard Multi-Stage Dockerfile
+# ===================
+# Use this for: Local development, testing, or when you don't have pre-built binaries
+# For CI/CD: Use Dockerfile.prebuilt instead (much faster, uses pre-compiled binaries)
+# ===================
+
+# ===================
 # STAGE 1: Build the Go application
 # ===================
 
