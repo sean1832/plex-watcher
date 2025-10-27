@@ -238,19 +238,12 @@ func (s *Scanner) GetAllSections() []types.SectionRoot {
 }
 
 // MapToPlexPath maps a local filesystem path to path existed on remote plex server
-func (s *Scanner) MapToPlexPath(localPath string) (mapped string, matchedRoot string, ok bool) {
+func (s *Scanner) MapToPlexPath(localPath string) (mapped string, matchedRoot *types.SectionRoot) {
 	if len(s.roots) == 0 {
-		return "", "", false
+		return "", nil
 	}
 
-	roots := make([]string, 0, len(s.roots))
-	for _, r := range s.roots {
-		if r.RootPath != "" {
-			roots = append(roots, r.RootPath)
-		}
-	}
-
-	return mapToPlexPath(localPath, roots)
+	return mapToPlexPath(localPath, s.roots)
 }
 
 // isDigit checks if a byte represents an ASCII digit.

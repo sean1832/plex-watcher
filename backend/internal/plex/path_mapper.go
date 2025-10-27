@@ -2,66 +2,70 @@ package plex
 
 import (
 	"path/filepath"
+	"plexwatcher/internal/types"
 	"strings"
 )
 
 // MapToPlexPath returns the Plex-visible path for a given local path,
 // using longest suffix matching on path components (case-insensitive).
 // It also returns the matched Plex root. If no root matches, ok=false.
-func mapToPlexPath(localPath string, plexRoots []string) (mapped string, matchedRoot string, ok bool) {
+func mapToPlexPath(localPath string, sectionRoots []types.SectionRoot) (mapped string, matchedRoot *types.SectionRoot) {
 	localParts := splitPathParts(localPath)
 	if len(localParts) == 0 {
-		return "", "", false // <-- cannot split
+		return "", nil // <-- cannot split
 	}
 	localLower := toLower(localParts)
 
 	var (
-		bestRoot     string
-		bestK        int
-		bestChildren []string
+		bestK           int
+		bestChildren    []string
+		bestSectionRoot types.SectionRoot
 	)
 
-	for _, root := range plexRoots {
-		rootParts := splitPathParts(root)
+	for _, root := range sectionRoots {
+		if root.RootPath == "" {
+			continue
+		}
+		rootParts := splitPathParts(root.RootPath)
 		if len(rootParts) == 0 {
 			continue // <-- cannot split plex root, proceed to next root
 		}
 		rootLower := toLower(rootParts)
 
-		maxK := min(len(rootParts), len(localParts))
-		// try longest surfix -> shortest
+		maxK := len(rootParts)
 		for k := maxK; k >= 1; k-- {
-			suffix := rootLower[len(rootLower)-1:] // last k part of the root
+			suffix := rootLower[len(rootLower)-k:] // last k part of the root
 			// slide this suffix across the local path
 			for idx := 0; idx <= len(localLower)-k; idx++ {
 				if equalString(localLower[idx:idx+k], suffix) {
 					children := localParts[idx+k:]
 					if k > bestK {
-						bestRoot = root
 						bestK = k
 						bestChildren = children
+						bestSectionRoot = root
 					}
-					break // found a match at this k; try a longer k for this root earlier
+					break // found the best match for this k; no need to check shorter substrings
 				}
 			}
 			if bestK == k {
-				break // cannot beat k for this root
+				break // longest possible k for this root; move to the next root
 			}
 		}
 	}
-	if bestRoot == "" {
-		return "", "", false
+
+	if bestSectionRoot.RootPath == "" {
+		return "", nil
 	}
 
 	// join using os-native seperators for the mapped results
 	mapped = filepath.Join(append([]string{
-		filepath.Clean(bestRoot),
+		filepath.Clean(bestSectionRoot.RootPath),
 	}, bestChildren...)...)
 
 	// normalize to forward slashes for Plex compatibility (Plex expects Unix-style paths)
 	mapped = filepath.ToSlash(mapped)
 
-	return mapped, bestRoot, true
+	return mapped, &bestSectionRoot
 }
 
 func splitPathParts(p string) []string {
@@ -104,12 +108,4 @@ func equalString(a, b []string) bool {
 		}
 	}
 	return true
-}
-
-// min returns the smaller of two integers.
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

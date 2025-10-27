@@ -198,8 +198,8 @@ func (api *api) Scan(w http.ResponseWriter, r *http.Request) {
 	for _, path := range req.Paths {
 
 		// map to plex path first
-		plexPath, _, ok := scanner.MapToPlexPath(path)
-		if !ok {
+		plexPath, section := scanner.MapToPlexPath(path)
+		if section == nil {
 			log.Printf("path %s does not map to any Plex library path, skipping scan", path)
 			continue
 		}
@@ -292,12 +292,23 @@ func (api *api) handleDirUpdate(e fs_watcher.Event) {
 		eventType = "UNKNOWN"
 	}
 
-	plexPath, _, ok := api.scanner.MapToPlexPath(e.Path)
-	if !ok {
+	plexPath, section := api.scanner.MapToPlexPath(e.Path)
+	if section == nil {
 		log.Printf("path %s does not map to any Plex library path, skipping scan", e.Path)
 		return
 	}
-	targetDir := filepath.Dir(plexPath)     // scan the parent directory
+
+	var targetDir string
+	if section.SectionType == types.MediaTypeShow {
+		// if show; skip `season x` folder.
+		// show is structured as `title/season x/s01e01.mkv`
+		targetDir = filepath.Dir(filepath.Dir(plexPath))
+		log.Printf("path is show. targetDir: %s", targetDir)
+	} else {
+		targetDir = filepath.Dir(plexPath) // scan the parent directory
+		log.Printf("path is movie. targetDir: %s", targetDir)
+	}
+
 	targetDir = filepath.ToSlash(targetDir) // normalize to forward slashes for Plex
 
 	log.Printf("[%s] %s", eventType, targetDir)
