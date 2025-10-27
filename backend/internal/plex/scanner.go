@@ -170,11 +170,16 @@ func (s *Scanner) GetScanPath(path string, mediaType types.MediaType) string {
 	return filepath.Dir(cleanPath)
 }
 
-// getShowRootPath strips "Season X" folders from the path to get the show root.
+// getShowRootPath strips "Season X" folders and the filename from the path to get the show root.
+// Example: "/tv-shows/Breaking Bad/Season 1/episode.mkv" -> "/tv-shows/Breaking Bad"
 func (s *Scanner) getShowRootPath(path string) string {
-	pathParts := strings.Split(path, string(filepath.Separator))
+	// First, get the directory (removes filename if it's a file)
+	dirPath := filepath.Dir(path)
 
-	// Walk backwards through path parts to find and remove "Season X"
+	// Split into parts for analysis
+	pathParts := strings.Split(dirPath, string(filepath.Separator))
+
+	// Walk backwards and remove all "Season X" folders
 	var cleanParts []string
 	for _, part := range pathParts {
 		partLower := strings.ToLower(part)
