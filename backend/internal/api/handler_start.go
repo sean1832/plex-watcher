@@ -85,12 +85,6 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 		return
 	}
 
-	// ignore CHMOD events (no content change)
-	if e.Op&fsnotify.Chmod == fsnotify.Chmod {
-		logger.Debug("file event ignored.", "event", "CHMOD")
-		return
-	}
-
 	// log event type
 	var eventType string
 	switch {
@@ -102,6 +96,8 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 		eventType = "REMOVE"
 	case e.Op&fsnotify.Rename == fsnotify.Rename:
 		eventType = "RENAME"
+	case e.Op&fsnotify.Chmod == fsnotify.Chmod:
+		eventType = "CHMOD"
 	default:
 		eventType = "UNKNOWN"
 	}
@@ -126,12 +122,7 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 	}
 	targetDir := filepath.ToSlash(plexScanTarget) // normalize to forward slashes for Plex
 
-	logger.Debug("Path identified",
-		"type", section.SectionType,
-		"local_path", e.Path,
-		"scan_target", targetDir)
-
-	logger.Info("file event accepted, queuing scan", "scan_target", targetDir, "event", eventType)
+	logger.Info("file event detected, queuing scan", "scan_target", targetDir, "event", eventType)
 
 	// Check if this path is already being scanned (deduplication)
 	h.activeScansMutex.Lock()
