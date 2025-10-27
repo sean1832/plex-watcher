@@ -7,8 +7,8 @@ import (
 	"plexwatcher/internal/types"
 )
 
-// GetStatus returns the current status of the watcher
-func (h *Handler) GetStatus(w http.ResponseWriter, r *http.Request) {
+// status returns the current status of the watcher
+func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 	running, paths, cooldown := h.Watcher.Status()
 	status := "stopped"
 	if running {
@@ -36,4 +36,3 @@ func (h *Handler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	response.WriteSuccess(w, "success retrieving status", resp, http.StatusOK)
 }
-

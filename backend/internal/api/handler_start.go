@@ -14,8 +14,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// Start the watcher with provided configuration
-func (h *Handler) Start(w http.ResponseWriter, r *http.Request) {
+// start the watcher with provided configuration
+func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 	var req types.RequestStart
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.WriteError(w, err.Error(), http.StatusBadRequest)

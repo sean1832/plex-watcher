@@ -6,8 +6,8 @@ import (
 	"plexwatcher/internal/response"
 )
 
-// Stop the watcher
-func (h *Handler) Stop(w http.ResponseWriter, r *http.Request) {
+// stop the watcher
+func (h *Handler) stop(w http.ResponseWriter, r *http.Request) {
 	if err := h.Watcher.Stop(); err != nil {
 		response.WriteError(w, err.Error(), http.StatusInternalServerError)
 		slog.Error("failed to stop Plex watcher", "error", err)
@@ -16,4 +16,3 @@ func (h *Handler) Stop(w http.ResponseWriter, r *http.Request) {
 	slog.Info("plex watcher stopped.")
 	response.WriteSuccess(w, "watcher stopped", nil, http.StatusOK)
 }
-

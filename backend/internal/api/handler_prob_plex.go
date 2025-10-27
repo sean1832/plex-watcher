@@ -8,7 +8,7 @@ import (
 	"plexwatcher/internal/response"
 )
 
-func (h *Handler) ProbPlex(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) probPlex(w http.ResponseWriter, r *http.Request) {
 	// list plex sections
 	if r.Method != http.MethodGet {
 		response.WriteError(w, "method not allowed, expected GET", http.StatusMethodNotAllowed)
@@ -51,4 +51,3 @@ func (h *Handler) ProbPlex(w http.ResponseWriter, r *http.Request) {
 
 	response.WriteSuccess(w, "success hitting plex server & retreived library sections", sections, http.StatusOK)
 }
-

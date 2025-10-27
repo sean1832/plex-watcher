@@ -12,7 +12,7 @@ import (
 )
 
 // Manually trigger stateless a scan for specified paths
-func (h *Handler) Scan(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) scan(w http.ResponseWriter, r *http.Request) {
 	var req types.RequestScan
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.WriteError(w, err.Error(), http.StatusBadRequest)
@@ -87,4 +87,3 @@ func (h *Handler) Scan(w http.ResponseWriter, r *http.Request) {
 	}
 	response.WriteSuccess(w, "scanned triggered", nil, http.StatusOK)
 }
-

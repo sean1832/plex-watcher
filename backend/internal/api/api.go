@@ -38,15 +38,15 @@ func NewHandler(ctx context.Context, concurrency int, allowedExtensions []string
 
 // RegisterRoutes sets up the HTTP routes for the API.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/", h.Root)
-	mux.HandleFunc("/status", h.GetStatus)
-	mux.HandleFunc("/start", h.Start)
-	mux.HandleFunc("/stop", h.Stop)
-	mux.HandleFunc("/scan", h.Scan)
-	mux.HandleFunc("/prob-plex", h.ProbPlex)
+	mux.HandleFunc("/", h.root)
+	mux.HandleFunc("/status", h.status)
+	mux.HandleFunc("/start", h.start)
+	mux.HandleFunc("/stop", h.stop)
+	mux.HandleFunc("/scan", h.scan)
+	mux.HandleFunc("/prob-plex", h.probPlex)
 }
 
-func (h *Handler) Root(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) root(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Server is operational. Use endpoint /start, /stop, /scan, /status, /prob-plex.\n"))
