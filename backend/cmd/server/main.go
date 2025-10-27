@@ -11,6 +11,8 @@ import (
 	"github.com/lmittmann/tint"
 )
 
+var Version = "dev"
+
 // configureLogger sets up the logger with the specified level
 // This can be called multiple times to reconfigure logging
 func configureLogger(level slog.Level) {
@@ -41,6 +43,7 @@ func main() {
 
 	slog.Info(
 		"Server started",
+		"version", Version,
 		"log_level", conf.LogLevel.String(),
 		"concurrency", conf.Concurrency,
 		"extensions", conf.Extensions,
