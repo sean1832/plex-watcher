@@ -1,166 +1,82 @@
-# Plex-Watcher Backend
+# Plex Watcher Backend
 
-Backend API service for Plex-Watcher. Built with FastAPI.
+Monitors filesystem changes and auto-scans Plex libraries. Debounces bulk operations, maps Docker paths, handles TV shows intelligently.
+
+## Overview
+
+A lightweight Go service that watches your media directories and automatically triggers Plex library scans when files change.
 
 ## Features
+- **Smart path mapping** - Handles Docker volume mounts (host paths -> container paths)
+- **Debounced scanning** - Batches rapid changes to avoid spamming Plex during bulk operations
+- **Concurrent control** - Limits parallel Plex API calls to prevent server overload
 
-- RESTful API to interact with Plex-Watcher.
-- Independent of the frontend, allowing for flexible deployment.
-- Supports both `.env` file and system environment variables (Docker-compatible).
+Perfect for Docker deployments where Plex sees different paths than your filesystem watcher.
 
-## Configuration
+## Quick Start
 
-### Environment Variables
+**Docker Compose (Recommended)**
 
-The backend can be configured using environment variables. Priority order:
-
-1. **System environment variables** (highest priority - Docker)
-2. **`.env` file** (for local development)
-3. **Default values** (lowest priority)
-
-Available environment variables:
-
-| Variable       | Default                     | Description                                                    |
-| -------------- | --------------------------- | -------------------------------------------------------------- |
-| `API_HOST`     | `0.0.0.0`                   | Host to bind the API server                                    |
-| `API_PORT`     | `8000`                      | Port to bind the API server                                    |
-| `LOG_LEVEL`    | `INFO`                      | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)          |
-| `MEDIA_ROOT`   | `/media`                    | Base path for media files (used in Docker for path resolution) |
-| `CONFIG_PATH`  | `config.json`               | Path to the configuration JSON file                            |
-| `CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated list of allowed CORS origins                   |
-
-### Using .env File (Local Development)
-
-For local development or non-Docker deployments:
-
-1. Copy the example environment file:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Edit `.env` with your preferred settings:
-
-   ```env
-   API_HOST=0.0.0.0
-   API_PORT=8000
-   LOG_LEVEL=DEBUG
-   MEDIA_ROOT=/path/to/your/media
-   CONFIG_PATH=/path/to/config.json
-   CORS_ORIGINS=http://localhost:5173,http://localhost:4173
-   ```
-
-3. Start the backend service (the `.env` file will be automatically loaded):
-   ```bash
-   plex-watcher-apibackend
-   ```
-
-**Note:** The `.env` file is automatically loaded from either:
-
-- The `backend/` directory
-- The project root directory
-
-## Installation
-
-### Docker (Recommended)
-
-Docker deployment uses system environment variables. Create a `docker-compose.yml` file:
-
-```yaml
-version: "3.8"
-
-services:
-  backend:
-    image: sean1832/plex-watcher-backend:latest
-    container_name: plex-watcher-backend
-    ports:
-      - "7788:8000"
-    environment:
-      - API_HOST=0.0.0.0
-      - API_PORT=8000
-      - LOG_LEVEL=INFO
-      - MEDIA_ROOT=/media
-      - CONFIG_PATH=/config/config.json
-      - CORS_ORIGINS=* # <-- Adjust this for security in production (comma-separated list)
-    user: "1036:100" # <-- UID:GID. Must match the user running docker on your host system.
-    volumes:
-      # Mount your media directories to watch as read-only
-      - /path/to/your/media:/media:ro # <-- this should be your media root which contains Movies, TV Shows, etc.
-      - /path/to/your/config:/config
-    restart: unless-stopped
-    networks:
-      - plex-watcher-network
-
-networks:
-  plex-watcher-network:
-    driver: bridge
-```
-
-Adjust the paths in the `docker-compose.yml` file as needed, then start the service:
+see [docker-compose.yml](docker-compose.yml)
 
 ```bash
 docker-compose up -d
 ```
 
-### Local Deployment
-
-Recommended for LXC containers or local machines for direct deployment without Docker.
-
-1. Download latest release:
-
+**Docker**
 ```bash
-VERSION=$(curl -s "https://api.github.com/repos/sean1832/plex-watcher/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-curl -L -O "https://github.com/sean1832/plex-watcher/releases/download/$VERSION/plex_watcher_backend-$VERSION-py3-none-any.whl"
+docker run -d \
+  -p 7788:8080 \
+  -v /path/to/media:/media:ro \
+  -e CONCURRENCY_LIMIT=10 \
+  -e SUPPORTED_EXTENSIONS=.mp4,.mkv,.avi,.mov \
+  --user 1036:100 \
+  sean1832/plexwatcher-backend:latest
 ```
 
-2. Install the downloaded wheel file:
-
+**Native**
 ```bash
-python -m venv venv
-source ./venv/bin/activate  # On Windows: .\venv\Scripts\activate
-pip install plex_watcher_backend-$VERSION-py3-none-any.whl
+go build -o bin/server ./cmd/server
+./bin/server  # Listens on :8080
 ```
 
-3. Create a `.env` file in your working directory (see [Configuration](#configuration) above):
+> [!TIP]
+> You can test if the backend is working after starting it:
+> ```bash
+> curl http://localhost:7788/status
+> ```
+> You should see a JSON response with the watcher's status.
 
-```bash
-cp .env.example .env
-# Edit .env with your settings
+## API
+
+| Endpoint     | Method | Body                                     | What It Does                         |
+| ------------ | ------ | ---------------------------------------- | ------------------------------------ |
+| `/start`     | POST   | `{server_url, token, paths[], cooldown}` | Start watching directories           |
+| `/stop`      | POST   | -                                        | Stop watcher                         |
+| `/scan`      | POST   | `{server_url, token, paths[]}`           | Manual scan                          |
+| `/status`    | GET    | -                                        | Watcher status                       |
+| `/prob-plex` | GET    | -                                        | Test Plex connection, list libraries |
+
+**Example Start Request**
+```json
+{
+  "server_url": "http://plex:32400",
+  "token": "YOUR_PLEX_TOKEN",
+  "paths": ["/media/Movies", "/media/TV Shows"],
+  "cooldown": 10
+}
 ```
 
-4. Start the backend service:
+## Config (Environment Variables)
 
 ```bash
-plex-watcher-apibackend
+CONCURRENCY_LIMIT=10           # Max parallel Plex API calls
+SUPPORTED_EXTENSIONS=.mp4,.mkv # File types to trigger scans
 ```
 
-The service will automatically load settings from the `.env` file.
+## How It Works
 
-## Development
-
-For development with editable installation:
-
-```bash
-# From project root
-pip install -e backend/
-
-# Create .env file
-cp backend/.env.example backend/.env
-# Edit backend/.env as needed
-
-# Run the API server
-plex-watcher-apibackend
-```
-
-## Command Line Options
-
-You can override environment variables using command line arguments:
-
-```bash
-plex-watcher-apibackend --host 127.0.0.1 --port 9000
-```
-
-Available options:
-
-- `-H`, `--host`: API server host (overrides `API_HOST`)
-- `-P`, `--port`: API server port (overrides `API_PORT`)
+1. **Watches** filesystem with `fsnotify`
+2. **Debounces** events (batch changes within cooldown window)
+3. **Maps** local paths to Plex paths (handles Docker mounts via suffix matching)
+4. **Scans** correct Plex library section (TV shows auto-strip season folders)
