@@ -97,25 +97,36 @@ func (pw *PlexWatcher) Start(ctx context.Context) error {
 	if pw.started {
 		return errors.New("watcher already started")
 	}
-	// validate and add directories
+	// add only the top-level dirs first. This will be expanded if Recursive is set.
 	for _, dir := range pw.cfg.Dirs {
 		if err := ensureDirExists(dir); err != nil {
 			return err
 		}
-		if pw.cfg.Recursive {
-			if err := pw.addRecursive(dir); err != nil {
-				return err
-			}
-		} else {
-			if err := pw.watcher.Add(dir); err != nil {
-				return fmt.Errorf("watcher.Add(%s): %w", dir, err)
-			}
+		if err := pw.watcher.Add(dir); err != nil {
+			return fmt.Errorf("watcher.Add(%s): %w", dir, err)
 		}
 	}
 
+	// start the main run loop
 	pw.started = true
 	pw.waitGroup.Add(1)
 	go pw.run(ctx)
+
+	// launch background goroutine to add subdirs if Recursive is set
+	if pw.cfg.Recursive {
+		for _, dir := range pw.cfg.Dirs {
+			dirToScan := dir // create lexcial copy for goroutine
+			go func() {
+				slog.Info("starting background recursive scan", "path", dirToScan)
+				if err := pw.addRecursive(dirToScan); err != nil {
+					slog.Error("failed to perform initial recursive add", "path", dirToScan, "error", err)
+				} else {
+					slog.Info("completed background recursive scan", "path", dirToScan)
+				}
+			}()
+		}
+	}
+
 	return nil
 }
 
@@ -131,7 +142,6 @@ func (pw *PlexWatcher) Stop() error {
 	pw.mutex.Unlock()
 
 	// closing the fsnotify watcher unblocks <-Events and <-Errors
-	_ = pw.watcher.Close()
 	pw.waitGroup.Wait()
 	return nil
 }
@@ -139,6 +149,7 @@ func (pw *PlexWatcher) Stop() error {
 // run pumps events/errors, does optional debouncing, and handles recursive add-on-new-dir.
 func (pw *PlexWatcher) run(ctx context.Context) {
 	defer pw.waitGroup.Done()
+	defer pw.watcher.Close()
 
 	var (
 		debounce = pw.cfg.DebounceWindow
@@ -175,11 +186,13 @@ func (pw *PlexWatcher) run(ctx context.Context) {
 			// final flush
 			if debounce > 0 {
 				flush()
+				return
 			}
 			return
 		case <-ctx.Done():
 			if debounce > 0 {
 				flush()
+				return
 			}
 			return
 		case err, ok := <-pw.watcher.Errors:
@@ -231,7 +244,6 @@ func (pw *PlexWatcher) run(ctx context.Context) {
 			}(timer)
 		}
 	}
-
 }
 
 // ====================
@@ -242,13 +254,21 @@ func (pw *PlexWatcher) run(ctx context.Context) {
 func (pw *PlexWatcher) addRecursive(root string) error {
 	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return err
+			// Error accessing the path (e.g., permissions)
+			slog.Warn("error accessing path during scan, skipping", "path", path, "error", err)
+			if d.IsDir() {
+				return filepath.SkipDir // Skip contents of unreadable dir
+			}
+			return nil // Skip this file, continue walk
 		}
 		if d.IsDir() {
 			if err := pw.watcher.Add(path); err != nil {
-				return fmt.Errorf("watcher.Add(%s): %w", path, err)
+				// FAILED TO ADD WATCH
+				// Log and continue
+				slog.Warn("failed to add path to watcher", "path", path, "error", err)
 			}
 		}
+		// continue walking
 		return nil
 	})
 }
