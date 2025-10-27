@@ -102,24 +102,25 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 		eventType = "UNKNOWN"
 	}
 
-	plexPath, section := h.scanner.MapToPlexPath(e.Path)
+	// First, map to Plex path to get section info
+	_, section := h.scanner.MapToPlexPath(e.Path)
 	if section == nil {
 		logger.Warn("path does not map to any Plex library path, skipping scan")
 		return
 	}
 
-	var targetDir string
-	if section.SectionType == types.MediaTypeShow {
-		// if show; skip `season x` folder.
-		// show is structured as `title/season x/s01e01.mkv`
-		targetDir = filepath.Dir(filepath.Dir(plexPath))
-		logger.Debug("Path identified as show.", "scan_target", targetDir)
-	} else {
-		targetDir = filepath.Dir(plexPath) // scan the parent directory
-		logger.Debug("Path identified as movie.", "scan_target", targetDir)
-	}
+	// Calculate scan target on LOCAL path first (like Python does)
+	// This gets us to the item root (movie folder or show folder)
+	localScanTarget := h.scanner.GetScanPath(e.Path, section.SectionType)
 
-	targetDir = filepath.ToSlash(targetDir) // normalize to forward slashes for Plex
+	// Now map the calculated target to Plex path
+	plexScanTarget, _ := h.scanner.MapToPlexPath(localScanTarget)
+	targetDir := filepath.ToSlash(plexScanTarget) // normalize to forward slashes for Plex
+
+	logger.Debug("Path identified",
+		"type", section.SectionType,
+		"local_path", e.Path,
+		"scan_target", targetDir)
 
 	logger.Info("file event accepted, queuing scan", "scan_target", targetDir, "event", eventType)
 
