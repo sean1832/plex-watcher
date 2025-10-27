@@ -68,11 +68,15 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 		return
 	}
 
-	// Filter: only process paths with allowed extensions (skips .txt, .nfo, etc.)
-	// This automatically filters directories since they have no extension
+	// Filter: only process files with allowed extensions
+	// Directories have no extension and are automatically skipped
 	ext := strings.ToLower(filepath.Ext(e.Path))
-	if ext == "" || !ensureExtAllowed(e.Path, h.allowedExtensions) {
-		logger.Debug("invalid extension, skipping event")
+	if ext == "" {
+		logger.Debug("skipping directory or extensionless file", "path", e.Path)
+		return
+	}
+	if !ensureExtAllowed(e.Path, h.allowedExtensions) {
+		logger.Debug("disallowed extension, skipping event", "extension", ext)
 		return
 	}
 
