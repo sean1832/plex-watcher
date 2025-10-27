@@ -114,7 +114,12 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 	localScanTarget := h.scanner.GetScanPath(e.Path, section.SectionType)
 
 	// Now map the calculated target to Plex path
-	plexScanTarget, _ := h.scanner.MapToPlexPath(localScanTarget)
+	plexScanTarget, mappedSection := h.scanner.MapToPlexPath(localScanTarget)
+	if mappedSection == nil || plexScanTarget == "" {
+		logger.Warn("failed to map scan target to Plex path, skipping scan",
+			"local_scan_target", localScanTarget)
+		return
+	}
 	targetDir := filepath.ToSlash(plexScanTarget) // normalize to forward slashes for Plex
 
 	logger.Debug("Path identified",
