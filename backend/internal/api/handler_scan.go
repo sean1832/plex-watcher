@@ -81,7 +81,7 @@ func (h *Handler) scan(w http.ResponseWriter, r *http.Request) {
 			if section, err := s.ScanPath(h.Context, p); err != nil {
 				slog.Error("scan failed", "path", p, "error", err)
 			} else {
-				slog.Error("scan completed", "path", p, "section", section.SectionTitle)
+				slog.Info("scan completed", "path", p, "section", section.SectionTitle)
 			}
 		}(targetDir, scanner)
 	}
