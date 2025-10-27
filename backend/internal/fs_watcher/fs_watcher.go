@@ -115,15 +115,14 @@ func (pw *PlexWatcher) Start(ctx context.Context) error {
 	// launch background goroutine to add subdirs if Recursive is set
 	if pw.cfg.Recursive {
 		for _, dir := range pw.cfg.Dirs {
-			dirToScan := dir // create lexcial copy for goroutine
-			go func() {
+			go func(dirToScan string) {
 				slog.Info("starting background recursive scan", "path", dirToScan)
 				if err := pw.addRecursive(dirToScan); err != nil {
 					slog.Error("failed to perform initial recursive add", "path", dirToScan, "error", err)
 				} else {
 					slog.Info("completed background recursive scan", "path", dirToScan)
 				}
-			}()
+			}(dir) // <-- Pass dir as argument to capture by value
 		}
 	}
 
