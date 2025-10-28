@@ -4,8 +4,8 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
-	"plexwatcher/internal/plex"
 	"plexwatcher/internal/response"
+	"plexwatcher/internal/services/plex"
 )
 
 func (h *Handler) probPlex(w http.ResponseWriter, r *http.Request) {

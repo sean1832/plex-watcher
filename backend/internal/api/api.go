@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"plexwatcher/internal/plex"
+	"plexwatcher/internal/services/plex"
 	"plexwatcher/internal/watcher_manager"
 )
 

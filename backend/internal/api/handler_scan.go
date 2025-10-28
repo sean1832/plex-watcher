@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
-	"plexwatcher/internal/plex"
 	"plexwatcher/internal/response"
+	"plexwatcher/internal/services/plex"
 	"plexwatcher/internal/types"
 	"strings"
 )
