@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"plexwatcher/internal/http/request"
 	"plexwatcher/internal/types"
 	"strconv"
 	"time"
@@ -18,7 +19,6 @@ type PlexClient struct {
 	BaseURL   *url.URL
 	Token     string
 	HTTP      *http.Client
-	UserAgent string // optional, can be empty
 }
 
 // NewPlexClient creates a new PlexClient with the given base URL and token.
@@ -42,35 +42,7 @@ func NewPlexClient(base, token string) (*PlexClient, error) {
 		HTTP: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		UserAgent: "PlexWatcherClient/1.0",
 	}, nil
-}
-
-func (pc *PlexClient) buildURL(parts []string, q url.Values) *url.URL {
-	u := *pc.BaseURL // copy
-	u.Path, _ = url.JoinPath(pc.BaseURL.Path, parts...)
-	if q == nil {
-		q = url.Values{}
-	}
-	if pc.Token != "" {
-		q.Set("X-Plex-Token", pc.Token)
-	}
-	u.RawQuery = q.Encode()
-	return &u
-}
-
-func (pc *PlexClient) newRequest(ctx context.Context, method string, u *url.URL, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
-	if err != nil {
-		return nil, fmt.Errorf("error making request context: %v", err)
-	}
-	if pc.UserAgent != "" {
-		req.Header.Set("User-Agent", pc.UserAgent)
-	}
-	// accept response as JSON
-	req.Header.Set("accept", "application/json")
-
-	return req, nil
 }
 
 // ======================
@@ -82,7 +54,7 @@ func (pc *PlexClient) ListSections(ctx context.Context) ([]types.PlexSection, er
 	// ENDPOINT: /library/sections
 	u := pc.buildURL([]string{"library", "sections"}, nil)
 
-	req, err := pc.newRequest(ctx, http.MethodGet, u, nil)
+	req, err := request.NewRequest(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +118,7 @@ func (pc *PlexClient) ScanSectionPath(ctx context.Context, sectionKey int, path 
 	}
 
 	u := pc.buildURL([]string{"library", "sections", strconv.Itoa(sectionKey), "refresh"}, query)
-	req, err := pc.newRequest(ctx, http.MethodPost, u, nil)
+	req, err := request.NewRequest(ctx, http.MethodPost, u, nil)
 	if err != nil {
 		return err
 	}
@@ -164,4 +136,21 @@ func (pc *PlexClient) ScanSectionPath(ctx context.Context, sectionKey int, path 
 
 	// treat non-error as success
 	return nil
+}
+
+// ======================
+// UTILS
+// ======================
+
+func (pc *PlexClient) buildURL(parts []string, q url.Values) *url.URL {
+	u := *pc.BaseURL // copy
+	u.Path, _ = url.JoinPath(pc.BaseURL.Path, parts...)
+	if q == nil {
+		q = url.Values{}
+	}
+	if pc.Token != "" {
+		q.Set("X-Plex-Token", pc.Token)
+	}
+	u.RawQuery = q.Encode()
+	return &u
 }

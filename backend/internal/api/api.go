@@ -44,6 +44,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/stop", h.stop)
 	mux.HandleFunc("/scan", h.scan)
 	mux.HandleFunc("/prob-plex", h.probPlex)
+	mux.HandleFunc("/prob-abs", h.probAudiobookshelf)
 }
 
 func (h *Handler) root(w http.ResponseWriter, r *http.Request) {
