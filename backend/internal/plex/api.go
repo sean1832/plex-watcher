@@ -14,7 +14,7 @@ import (
 )
 
 type PlexAPI interface {
-	ListSections(ctx context.Context) ([]types.SectionRoot, error)
+	ListSections(ctx context.Context) ([]types.PlexSection, error)
 	ScanSectionPath(ctx context.Context, sectionKey int, path *string) error
 }
 
@@ -83,7 +83,7 @@ func (pc *PlexClient) newRequest(ctx context.Context, method string, u *url.URL,
 // ======================
 
 // List all root libraries. (use this to get section keys for further operations)
-func (pc *PlexClient) ListSections(ctx context.Context) ([]types.SectionRoot, error) {
+func (pc *PlexClient) ListSections(ctx context.Context) ([]types.PlexSection, error) {
 	// ENDPOINT: /library/sections
 	u := pc.buildURL([]string{"library", "sections"}, nil)
 
@@ -103,18 +103,18 @@ func (pc *PlexClient) ListSections(ctx context.Context) ([]types.SectionRoot, er
 		return nil, fmt.Errorf("plex list libraries: http %d: %s", res.StatusCode, string(b))
 	}
 
-	var resData types.ListSectionResponse // define to match plex schema
+	var resData types.PlexListSectionResponse // define to match plex schema
 	err = json.NewDecoder(res.Body).Decode(&resData)
 	if err != nil {
 		return nil, fmt.Errorf("plex list libraries: decode: %w", err)
 	}
-	sections := make([]types.SectionRoot, 0, len(resData.MediaContainer.Directory)) // <-- create a section root array
+	sections := make([]types.PlexSection, 0, len(resData.MediaContainer.Directory)) // <-- create a section root array
 	for _, d := range resData.MediaContainer.Directory {
 		id, err := strconv.Atoi(d.Key)
 		if err != nil {
 			return nil, fmt.Errorf("plex list library: failed to convert SectionKey to interger")
 		}
-		var mediaType types.MediaType
+		var mediaType types.PlexMediaType
 		switch d.Type {
 		case "movie":
 			mediaType = types.MediaTypeMovie
@@ -129,7 +129,7 @@ func (pc *PlexClient) ListSections(ctx context.Context) ([]types.SectionRoot, er
 			rootPath = filepath.Clean(d.Location[0].Path)
 		}
 
-		sections = append(sections, types.SectionRoot{
+		sections = append(sections, types.PlexSection{
 			SectionKey:   id,
 			SectionTitle: d.Title,
 			SectionType:  mediaType,

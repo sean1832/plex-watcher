@@ -17,11 +17,11 @@ type Scanner struct {
 	api PlexAPI
 
 	// sections maps section title to section metadata
-	sections map[string]types.SectionRoot
+	sections map[string]types.PlexSection
 
 	// roots contains all library root paths sorted by length (longest first)
 	// This enables proper matching for nested library structures
-	roots []types.SectionRoot
+	roots []types.PlexSection
 }
 
 // ===========
@@ -47,13 +47,13 @@ func NewScanner(ctx context.Context, api PlexAPI) (*Scanner, error) {
 	}
 
 	// Build section map by title
-	sectionMap := make(map[string]types.SectionRoot)
+	sectionMap := make(map[string]types.PlexSection)
 	for _, section := range sections {
 		sectionMap[section.SectionTitle] = section
 	}
 
 	// Sort roots by path length (longest first) for proper nested matching
-	roots := make([]types.SectionRoot, len(sections))
+	roots := make([]types.PlexSection, len(sections))
 	copy(roots, sections)
 	sort.Slice(roots, func(i, j int) bool {
 		return len(roots[i].RootPath) > len(roots[j].RootPath)
@@ -74,7 +74,7 @@ func NewScanner(ctx context.Context, api PlexAPI) (*Scanner, error) {
 //   - Falls back to section type detection
 //
 // For existing paths, it verifies the section type directly.
-func (s *Scanner) GetMediaType(path string, isDeleted bool) (types.MediaType, error) {
+func (s *Scanner) GetMediaType(path string, isDeleted bool) (types.PlexMediaType, error) {
 	// For deleted paths, use heuristic analysis
 	if isDeleted {
 		return s.getMediaTypeForDeleted(path)
@@ -91,7 +91,7 @@ func (s *Scanner) GetMediaType(path string, isDeleted bool) (types.MediaType, er
 
 // getMediaTypeForDeleted uses path structure heuristics to determine media type
 // when the file/directory no longer exists on disk.
-func (s *Scanner) getMediaTypeForDeleted(path string) (types.MediaType, error) {
+func (s *Scanner) getMediaTypeForDeleted(path string) (types.PlexMediaType, error) {
 	// Normalize path for comparison
 	normalizedPath := filepath.Clean(path)
 	pathParts := strings.Split(normalizedPath, string(filepath.Separator))
@@ -140,7 +140,7 @@ func (s *Scanner) getMediaTypeForDeleted(path string) (types.MediaType, error) {
 
 // ScanPath triggers a Plex library scan for the specified path.
 // It automatically determines the appropriate section and applies
-func (s *Scanner) ScanPath(ctx context.Context, path string) (*types.SectionRoot, error) {
+func (s *Scanner) ScanPath(ctx context.Context, path string) (*types.PlexSection, error) {
 	section, err := s.findSection(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan path: %w", err)
@@ -158,7 +158,7 @@ func (s *Scanner) ScanPath(ctx context.Context, path string) (*types.SectionRoot
 // GetScanPath returns the optimal path to scan based on media type.
 // For TV shows, it strips "Season X" folders to scan at the show level.
 // For movies, it returns the parent directory.
-func (s *Scanner) GetScanPath(path string, mediaType types.MediaType) string {
+func (s *Scanner) GetScanPath(path string, mediaType types.PlexMediaType) string {
 	cleanPath := filepath.Clean(path)
 
 	// For shows, we want to scan at the show level (not season level)
@@ -198,7 +198,7 @@ func (s *Scanner) getShowRootPath(path string) string {
 
 // findSection locates the Plex library section that contains the given path.
 // It uses longest-prefix matching to handle nested library structures correctly.
-func (s *Scanner) findSection(path string) (*types.SectionRoot, error) {
+func (s *Scanner) findSection(path string) (*types.PlexSection, error) {
 	cleanPath := filepath.Clean(path)
 
 	// Try to match against each root (already sorted longest-first)
@@ -230,20 +230,20 @@ func (s *Scanner) findSection(path string) (*types.SectionRoot, error) {
 }
 
 // GetSectionByTitle retrieves a section by its title.
-func (s *Scanner) GetSectionByTitle(title string) (*types.SectionRoot, bool) {
+func (s *Scanner) GetSectionByTitle(title string) (*types.PlexSection, bool) {
 	section, ok := s.sections[title]
 	return &section, ok
 }
 
 // GetAllSections returns all discovered library sections.
-func (s *Scanner) GetAllSections() []types.SectionRoot {
-	sections := make([]types.SectionRoot, 0, len(s.roots))
+func (s *Scanner) GetAllSections() []types.PlexSection {
+	sections := make([]types.PlexSection, 0, len(s.roots))
 	sections = append(sections, s.roots...)
 	return sections
 }
 
 // MapToPlexPath maps a local filesystem path to path existed on remote plex server
-func (s *Scanner) MapToPlexPath(localPath string) (mapped string, matchedRoot *types.SectionRoot) {
+func (s *Scanner) MapToPlexPath(localPath string) (mapped string, matchedRoot *types.PlexSection) {
 	if len(s.roots) == 0 {
 		return "", nil
 	}

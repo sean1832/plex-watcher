@@ -9,7 +9,7 @@ import (
 // MapToPlexPath returns the Plex-visible path for a given local path,
 // using longest suffix matching on path components (case-insensitive).
 // It also returns the matched Plex root. If no root matches, ok=false.
-func mapToPlexPath(localPath string, sectionRoots []types.SectionRoot) (mapped string, matchedRoot *types.SectionRoot) {
+func mapToPlexPath(localPath string, sectionRoots []types.PlexSection) (mapped string, matchedRoot *types.PlexSection) {
 	localParts := splitPathParts(localPath)
 	if len(localParts) == 0 {
 		return "", nil // <-- cannot split
@@ -19,7 +19,7 @@ func mapToPlexPath(localPath string, sectionRoots []types.SectionRoot) (mapped s
 	var (
 		bestK           int
 		bestChildren    []string
-		bestSectionRoot types.SectionRoot
+		bestSectionRoot types.PlexSection
 	)
 
 	for _, root := range sectionRoots {

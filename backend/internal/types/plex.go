@@ -4,33 +4,33 @@ package types
 // media types
 // =================================
 
-type MediaType string
+type PlexMediaType string
 
 const (
-	MediaTypeMovie MediaType = "movie"
-	MediaTypeShow  MediaType = "show"
+	MediaTypeMovie PlexMediaType = "movie"
+	MediaTypeShow  PlexMediaType = "show"
 )
 
 // =================================
 // section root
 // =================================
 
-// SectionRoot represents a Plex library section with its key, title, type, and root path.
-type SectionRoot struct {
-	SectionKey   int       `json:"section_key"`
-	SectionTitle string    `json:"section_title"`
-	SectionType  MediaType `json:"section_type"` // "movie" or "show"
-	RootPath     string    `json:"root_path"`    // normalized abs path
+// PlexSection represents a Plex library section with its key, title, type, and root path.
+type PlexSection struct {
+	SectionKey   int           `json:"section_key"`
+	SectionTitle string        `json:"section_title"`
+	SectionType  PlexMediaType `json:"section_type"` // "movie" or "show"
+	RootPath     string        `json:"root_path"`    // normalized abs path
 }
 
 // ================================
 // media container
 // ================================
-type ListSectionResponse struct {
-	MediaContainer mediaContainer `json:"MediaContainer"`
+type PlexListSectionResponse struct {
+	MediaContainer plexMediaContainer `json:"MediaContainer"`
 }
 
-type mediaContainer struct {
+type plexMediaContainer struct {
 	Size      int         `json:"size"`
 	Directory []directory `json:"Directory"`
 }
