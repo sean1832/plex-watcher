@@ -29,7 +29,7 @@ func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// initialize scanner
-	h.scanner, err = plex.NewScanner(h.Context, plexClient)
+	h.plex, err = plex.NewScanner(h.Context, plexClient)
 	if err != nil {
 		response.WriteError(w, err.Error(), http.StatusBadRequest)
 		slog.Error("failed to create Plex scanner", "error", err)
@@ -37,7 +37,7 @@ func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// log all root sections
-	for _, section := range h.scanner.GetAllSections() {
+	for _, section := range h.plex.GetAllSections() {
 		slog.Info("Plex section",
 			"title", section.SectionTitle,
 			"type", section.SectionType,
@@ -80,7 +80,7 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 		return
 	}
 
-	if h.scanner == nil {
+	if h.plex == nil {
 		logger.Warn("scanner not initialized, skipping event")
 		return
 	}
@@ -103,7 +103,7 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 	}
 
 	// First, map to Plex path to get section info
-	_, section := h.scanner.MapToPlexPath(e.Path)
+	_, section := h.plex.MapToPlexPath(e.Path)
 	if section == nil {
 		logger.Warn("path does not map to any Plex library path, skipping scan")
 		return
@@ -111,10 +111,10 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 
 	// Calculate scan target on LOCAL path first (like Python does)
 	// This gets us to the item root (movie folder or show folder)
-	localScanTarget := h.scanner.GetScanPath(e.Path, section.SectionType)
+	localScanTarget := h.plex.GetScanPath(e.Path, section.SectionType)
 
 	// Now map the calculated target to Plex path
-	plexScanTarget, mappedSection := h.scanner.MapToPlexPath(localScanTarget)
+	plexScanTarget, mappedSection := h.plex.MapToPlexPath(localScanTarget)
 	if mappedSection == nil || plexScanTarget == "" {
 		logger.Warn("failed to map scan target to Plex path, skipping scan",
 			"local_scan_target", localScanTarget)
@@ -139,7 +139,7 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 		h.scanSemaphore <- struct{}{}        // acquire a token
 		defer func() { <-h.scanSemaphore }() // release the token
 
-		if section, err := h.scanner.ScanPath(h.Context, p); err != nil {
+		if section, err := h.plex.ScanPath(h.Context, p); err != nil {
 			slog.Error("scan failed", "scan_target", targetDir, "error", err)
 		} else {
 			slog.Info("scan triggered", "scan_target", targetDir, "section", section.SectionTitle)

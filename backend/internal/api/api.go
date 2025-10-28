@@ -14,7 +14,7 @@ type Handler struct {
 	Watcher *watcher_manager.Manager
 	Context context.Context
 
-	scanner           *plex.Scanner
+	plex              *plex.Scanner
 	scanSemaphore     chan struct{}   // limit concurrent scans
 	activeScansMutex  sync.Mutex      // protect activeScans map
 	activeScans       map[string]bool // track paths currently being scanned

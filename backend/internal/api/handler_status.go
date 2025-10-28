@@ -23,8 +23,8 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 	)
 
 	var serverURL *string
-	if h.scanner != nil {
-		url := h.scanner.GetPlexClient().BaseURL.String()
+	if h.plex != nil {
+		url := h.plex.GetPlexClient().BaseURL.String()
 		serverURL = &url
 	}
 
