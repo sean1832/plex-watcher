@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"plexwatcher/internal/fs_watcher"
-	"plexwatcher/internal/response"
+	"plexwatcher/internal/http/response"
 	"plexwatcher/internal/services/plex"
 	"plexwatcher/internal/types"
 	"strings"

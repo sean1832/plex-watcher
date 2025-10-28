@@ -3,7 +3,7 @@ package api
 import (
 	"log/slog"
 	"net/http"
-	"plexwatcher/internal/response"
+	"plexwatcher/internal/http/response"
 )
 
 // stop the watcher
