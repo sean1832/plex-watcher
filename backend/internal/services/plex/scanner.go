@@ -14,7 +14,7 @@ import (
 // It maintains a mapping of filesystem paths to Plex library sections
 // and provides intelligent path-to-section matching using suffix-based resolution.
 type Scanner struct {
-	api PlexAPI
+	client *PlexClient
 
 	// sections maps section title to section metadata
 	sections map[string]types.PlexSection
@@ -28,16 +28,13 @@ type Scanner struct {
 // Getter
 // ===========
 func (s *Scanner) GetPlexClient() *PlexClient {
-	if s.api == nil {
-		return nil
-	}
-	return s.api.(*PlexClient)
+	return s.client
 }
 
 // NewScanner creates a new Scanner instance.
 // It fetches all library sections from the Plex server and builds
 // an optimized lookup structure for path-to-section matching.
-func NewScanner(ctx context.Context, api PlexAPI) (*Scanner, error) {
+func NewScanner(ctx context.Context, api *PlexClient) (*Scanner, error) {
 	sections, err := api.ListSections(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list libraries: %w", err)
@@ -60,7 +57,7 @@ func NewScanner(ctx context.Context, api PlexAPI) (*Scanner, error) {
 	})
 
 	return &Scanner{
-		api:      api,
+		client:   api,
 		sections: sectionMap,
 		roots:    roots,
 	}, nil
@@ -148,7 +145,7 @@ func (s *Scanner) ScanPath(ctx context.Context, path string) (*types.PlexSection
 
 	// Trigger the refresh with the specific path
 	pathStr := path
-	err = s.api.ScanSectionPath(ctx, section.SectionKey, &pathStr)
+	err = s.client.ScanSectionPath(ctx, section.SectionKey, &pathStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to refresh section '%s': %w", section.SectionTitle, err)
 	}

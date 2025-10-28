@@ -13,11 +13,6 @@ import (
 	"time"
 )
 
-type PlexAPI interface {
-	ListSections(ctx context.Context) ([]types.PlexSection, error)
-	ScanSectionPath(ctx context.Context, sectionKey int, path *string) error
-}
-
 // PlexClient is a client for interacting with the Plex Media Server API.
 type PlexClient struct {
 	BaseURL   *url.URL
