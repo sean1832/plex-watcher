@@ -11,7 +11,7 @@ import (
 
 type Manager struct {
 	mutex   sync.Mutex
-	watcher *fs_watcher.PlexWatcher
+	watcher *fs_watcher.FsWatcher
 	cancel  context.CancelFunc
 	running bool
 }

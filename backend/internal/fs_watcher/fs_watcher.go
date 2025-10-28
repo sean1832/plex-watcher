@@ -40,7 +40,7 @@ type Config struct {
 	Handler Handler
 }
 
-type PlexWatcher struct {
+type FsWatcher struct {
 	cfg     Config
 	watcher *fsnotify.Watcher
 
@@ -53,7 +53,7 @@ type PlexWatcher struct {
 }
 
 // Create a new watcher. Call Start(ctx) to start watching.
-func NewPlexWatcher(cfg Config) (*PlexWatcher, error) {
+func NewPlexWatcher(cfg Config) (*FsWatcher, error) {
 	if len(cfg.Dirs) == 0 {
 		return nil, errors.New("no directories provided")
 	}
@@ -64,7 +64,7 @@ func NewPlexWatcher(cfg Config) (*PlexWatcher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fsnotify.NewWatcher: %w", err)
 	}
-	pw := &PlexWatcher{
+	pw := &FsWatcher{
 		cfg:     cfg,
 		watcher: watcher,
 		stop:    make(chan struct{}),
@@ -77,7 +77,7 @@ func NewPlexWatcher(cfg Config) (*PlexWatcher, error) {
 // ====================
 
 // GetConfig returns the current configuration of the PlexWatcher.
-func (pw *PlexWatcher) GetConfig() Config {
+func (pw *FsWatcher) GetConfig() Config {
 	pw.mutex.Lock()
 	defer pw.mutex.Unlock()
 	return pw.cfg
@@ -88,7 +88,7 @@ func (pw *PlexWatcher) GetConfig() Config {
 // ====================
 
 // Start begins watching the configured directories.
-func (pw *PlexWatcher) Start(ctx context.Context) error {
+func (pw *FsWatcher) Start(ctx context.Context) error {
 	pw.mutex.Lock()
 	defer pw.mutex.Unlock()
 
@@ -136,7 +136,7 @@ func (pw *PlexWatcher) Start(ctx context.Context) error {
 }
 
 // Stop stops watching and releases resources.
-func (pw *PlexWatcher) Stop() error {
+func (pw *FsWatcher) Stop() error {
 	pw.mutex.Lock()
 	if pw.closed {
 		pw.mutex.Unlock()
@@ -152,7 +152,7 @@ func (pw *PlexWatcher) Stop() error {
 }
 
 // run pumps events/errors, does optional debouncing, and handles recursive add-on-new-dir.
-func (pw *PlexWatcher) run(ctx context.Context) {
+func (pw *FsWatcher) run(ctx context.Context) {
 	defer pw.waitGroup.Done()
 	defer pw.watcher.Close()
 
@@ -257,7 +257,7 @@ func (pw *PlexWatcher) run(ctx context.Context) {
 
 // add subdirs recursivesly with a root path
 // Uses parallel directory traversal for better performance on large directory trees
-func (pw *PlexWatcher) addRecursive(root string) error {
+func (pw *FsWatcher) addRecursive(root string) error {
 	// Collect all directories first (fast - just filesystem scan)
 	var dirs []string
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
