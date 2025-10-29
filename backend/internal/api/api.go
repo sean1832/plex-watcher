@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sync"
 
+	"plexwatcher/internal/services/audiobookshelf"
 	"plexwatcher/internal/services/plex"
 	"plexwatcher/internal/watcher_manager"
 )
@@ -15,6 +16,7 @@ type Handler struct {
 	Context context.Context
 
 	plex              *plex.Scanner
+	abs               *audiobookshelf.LibraryManager
 	scanSemaphore     chan struct{}   // limit concurrent scans
 	activeScansMutex  sync.Mutex      // protect activeScans map
 	activeScans       map[string]bool // track paths currently being scanned

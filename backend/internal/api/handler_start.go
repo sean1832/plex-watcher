@@ -7,11 +7,9 @@ import (
 	"path/filepath"
 	"plexwatcher/internal/fs_watcher"
 	"plexwatcher/internal/http/response"
+	"plexwatcher/internal/services/audiobookshelf"
 	"plexwatcher/internal/services/plex"
 	"plexwatcher/internal/types"
-	"strings"
-
-	"github.com/fsnotify/fsnotify"
 )
 
 // start the watcher with provided configuration
@@ -22,37 +20,71 @@ func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to decode start request", "error", err)
 		return
 	}
-	plexClient, err := plex.NewPlexClient(req.ServerUrl, req.Token)
-	if err != nil {
-		response.WriteError(w, err.Error(), http.StatusBadRequest)
-		slog.Error("failed to create Plex client", "error", err)
-		return
-	}
-	// initialize scanner
-	h.plex, err = plex.NewScanner(h.Context, plexClient)
-	if err != nil {
-		response.WriteError(w, err.Error(), http.StatusBadRequest)
-		slog.Error("failed to create Plex scanner", "error", err)
-		return
+
+	// Initialize Plex if configured
+	if plexConfig, ok := req.ServiceConfigs[types.ServicePlex]; ok {
+		plexClient, err := plex.NewPlexClient(plexConfig.ServerUrl, plexConfig.Token)
+		if err != nil {
+			response.WriteError(w, err.Error(), http.StatusBadRequest)
+			slog.Error("failed to create Plex client", "error", err)
+			return
+		}
+		// initialize scanner
+		h.plex, err = plex.NewScanner(h.Context, plexClient)
+		if err != nil {
+			response.WriteError(w, err.Error(), http.StatusBadRequest)
+			slog.Error("failed to create Plex scanner", "error", err)
+			return
+		}
+
+		// log all root sections
+		for _, section := range h.plex.GetAllSections() {
+			slog.Info("Plex section",
+				"title", section.SectionTitle,
+				"type", section.SectionType,
+				"path", section.RootPath,
+			)
+		}
+		slog.Info("Plex service initialized", "server", plexConfig.ServerUrl)
 	}
 
-	// log all root sections
-	for _, section := range h.plex.GetAllSections() {
-		slog.Info("Plex section",
-			"title", section.SectionTitle,
-			"type", section.SectionType,
-			"path", section.RootPath,
-		)
+	// Initialize Audiobookshelf if configured
+	if absConfig, ok := req.ServiceConfigs[types.ServiceAudiobookshelf]; ok {
+		absClient, err := audiobookshelf.NewClient(absConfig.ServerUrl, absConfig.Token)
+		if err != nil {
+			response.WriteError(w, err.Error(), http.StatusBadRequest)
+			slog.Error("failed to create Audiobookshelf client", "error", err)
+			return
+		}
+		// initialize lib manager
+		h.abs, err = audiobookshelf.NewLibraryManager(h.Context, absClient)
+		if err != nil {
+			response.WriteError(w, err.Error(), http.StatusBadRequest)
+			slog.Error("failed to create Audiobookshelf library manager", "error", err)
+			return
+		}
+
+		// log all lib
+		for _, lib := range h.abs.Libraries {
+			slog.Info("audiobookshelf libraries",
+				"title", lib.Name,
+				"id", lib.Id,
+				"paths", lib.Folders,
+			)
+		}
+
+		slog.Info("audiobookshelf service initialized", "server", absConfig.ServerUrl)
 	}
 
 	// start watcher
-	if err := h.Watcher.Start(req, h.handleDirUpdate); err != nil {
+	h.Watcher.RegisterHandler(types.ServicePlex, h.handlePlexUpdate)
+	h.Watcher.RegisterHandler(types.ServiceAudiobookshelf, h.handleAbsUpdate)
+	if err := h.Watcher.Start(req); err != nil {
 		response.WriteError(w, err.Error(), http.StatusBadRequest)
-		slog.Error("failed to start Plex watcher", "error", err)
+		slog.Error("failed to start watcher", "error", err)
 		return
 	}
-	slog.Info("plex watcher started.",
-		"server", req.ServerUrl,
+	slog.Info("watcher started",
 		"dirs", req.WatchedDirs,
 		"cooldown", req.Cooldown,
 	)
@@ -60,23 +92,48 @@ func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 	response.WriteSuccess(w, "watcher started", nil, http.StatusOK)
 }
 
-func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
-	logger := slog.With("path", e.Path)
+func (h *Handler) handleAbsUpdate(e fs_watcher.Event) {
+	logger := slog.With("path", e.Path, "service", types.ServiceAudiobookshelf)
 
-	if e.Err != nil {
-		logger.Error("watcher error", "error", e.Err)
+	if !validateEventAndExtension(e, h.allowedExtensions, logger) {
 		return
 	}
 
-	// Filter: only process files with allowed extensions
-	// Directories have no extension and are automatically skipped
-	ext := strings.ToLower(filepath.Ext(e.Path))
-	if ext == "" {
-		logger.Debug("skipping directory or extensionless file", "path", e.Path)
+	if h.abs == nil {
+		logger.Warn("audiobookshelf scanner not initialized, skipping event")
 		return
 	}
-	if !ensureExtAllowed(e.Path, h.allowedExtensions) {
-		logger.Debug("disallowed extension, skipping event", "extension", ext)
+
+	eventType := getEventType(e.Op)
+	targetDir := filepath.ToSlash(filepath.Dir(e.Path))
+	logger.Debug("file event detected, queuing scan", "scan_target", targetDir, "event", eventType)
+
+	// Check if this path is already being scanned (deduplication)
+	h.activeScansMutex.Lock()
+	if h.activeScans[targetDir] {
+		h.activeScansMutex.Unlock()
+		return
+	}
+	// Mark this path as being scanned
+	h.activeScans[targetDir] = true
+	h.activeScansMutex.Unlock()
+
+	// trigger abs scan
+	go func(path string) {
+		h.scanSemaphore <- struct{}{}        // acquire a token
+		defer func() { <-h.scanSemaphore }() // release the token
+		if err := h.abs.ScanPath(h.Context, path); err != nil {
+			slog.Error("audiobookshelf scan failed", "path", path, "error", err)
+		} else {
+			slog.Info("audiobookshelf scan succeeded", "path", path)
+		}
+	}(targetDir)
+}
+
+func (h *Handler) handlePlexUpdate(e fs_watcher.Event) {
+	logger := slog.With("path", e.Path, "service", types.ServicePlex)
+
+	if !validateEventAndExtension(e, h.allowedExtensions, logger) {
 		return
 	}
 
@@ -85,22 +142,7 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 		return
 	}
 
-	// log event type
-	var eventType string
-	switch {
-	case e.Op&fsnotify.Create == fsnotify.Create:
-		eventType = "CREATE"
-	case e.Op&fsnotify.Write == fsnotify.Write:
-		eventType = "WRITE"
-	case e.Op&fsnotify.Remove == fsnotify.Remove:
-		eventType = "REMOVE"
-	case e.Op&fsnotify.Rename == fsnotify.Rename:
-		eventType = "RENAME"
-	case e.Op&fsnotify.Chmod == fsnotify.Chmod:
-		eventType = "CHMOD"
-	default:
-		eventType = "UNKNOWN"
-	}
+	eventType := getEventType(e.Op)
 
 	// First, map to Plex path to get section info
 	_, section := h.plex.MapToPlexPath(e.Path)
@@ -122,7 +164,7 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 	}
 	targetDir := filepath.ToSlash(plexScanTarget) // normalize to forward slashes for Plex
 
-	logger.Info("file event detected, queuing scan", "scan_target", targetDir, "event", eventType)
+	logger.Debug("file event detected, queuing scan", "scan_target", targetDir, "event", eventType)
 
 	// Check if this path is already being scanned (deduplication)
 	h.activeScansMutex.Lock()

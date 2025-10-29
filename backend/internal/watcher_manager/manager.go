@@ -3,6 +3,7 @@ package watcher_manager
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"plexwatcher/internal/fs_watcher"
 	"plexwatcher/internal/types"
 	"sync"
@@ -10,19 +11,26 @@ import (
 )
 
 type Manager struct {
-	mutex   sync.Mutex
-	watcher *fs_watcher.FsWatcher
-	cancel  context.CancelFunc
-	running bool
+	mutex       sync.Mutex
+	watcher     *fs_watcher.FsWatcher
+	cancel      context.CancelFunc
+	running     bool
+	registry    *handlerRegistry
+	watchedDirs []types.WatchDir // cached watch dirs for dispatch
 }
 
 func NewManager() *Manager {
 	return &Manager{
-		running: false,
+		running:  false,
+		registry: NewHandlerRegistry(),
 	}
 }
 
-func (m *Manager) Start(req types.RequestStart, handler func(fs_watcher.Event)) error {
+func (m *Manager) RegisterHandler(service types.ServiceType, handler fs_watcher.Handler) {
+	m.registry.Register(service, handler)
+}
+
+func (m *Manager) Start(req types.RequestStart) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -35,6 +43,18 @@ func (m *Manager) Start(req types.RequestStart, handler func(fs_watcher.Event)) 
 	debounce := time.Duration(req.Cooldown) * time.Second
 	if debounce < 0 {
 		debounce = 0
+	}
+
+	// cache watched dir for dispatcher
+	m.watchedDirs = req.WatchedDirs
+
+	// create single handler that dispatches to service-specific handlers
+	handler := func(event fs_watcher.Event) {
+		err := m.registry.Dispatch(event, m.watchedDirs)
+		if err != nil {
+			// log error but do not stop watcher
+			slog.Warn("failed to dispatch event", "error", err, "event", event)
+		}
 	}
 
 	cfg := fs_watcher.Config{

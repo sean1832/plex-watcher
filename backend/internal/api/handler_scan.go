@@ -19,7 +19,16 @@ func (h *Handler) scan(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to decode scan request", "error", err)
 		return
 	}
-	plexClient, err := plex.NewPlexClient(req.ServerUrl, req.Token)
+
+	// Get Plex config from service_configs
+	plexConfig, ok := req.ServiceConfigs[types.ServicePlex]
+	if !ok {
+		response.WriteError(w, "plex service config not provided", http.StatusBadRequest)
+		slog.Error("plex service config missing in scan request")
+		return
+	}
+
+	plexClient, err := plex.NewPlexClient(plexConfig.ServerUrl, plexConfig.Token)
 	if err != nil {
 		response.WriteError(w, err.Error(), http.StatusBadRequest)
 		slog.Error("failed to create Plex client", "error", err)
