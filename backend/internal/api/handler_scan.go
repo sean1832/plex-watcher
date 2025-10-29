@@ -21,31 +21,29 @@ func (h *Handler) scan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get Plex config from service_configs
-	plexConfig, ok := req.ServiceConfigs[types.ServicePlex]
-	if !ok {
-		response.WriteError(w, "plex service config not provided", http.StatusBadRequest)
-		slog.Error("plex service config missing in scan request")
-		return
-	}
+	if plexConfig, ok := req.ServiceConfigs[types.ServicePlex]; ok {
+		plexClient, err := plex.NewPlexClient(plexConfig.ServerUrl, plexConfig.Token)
+		if err != nil {
+			response.WriteError(w, err.Error(), http.StatusBadRequest)
+			slog.Error("failed to create Plex client", "error", err)
+			return
+		}
+		scanner, err := plex.NewScanner(h.Context, plexClient)
+		if err != nil {
+			response.WriteError(w, err.Error(), http.StatusBadRequest)
+			slog.Error("failed to create Plex scanner", "error", err)
+			return
+		}
+		handlePlexManualScan(h, scanner, &req)
 
-	plexClient, err := plex.NewPlexClient(plexConfig.ServerUrl, plexConfig.Token)
-	if err != nil {
-		response.WriteError(w, err.Error(), http.StatusBadRequest)
-		slog.Error("failed to create Plex client", "error", err)
-		return
+		response.WriteSuccess(w, "scanned triggered", nil, http.StatusOK)
 	}
-	scanner, err := plex.NewScanner(h.Context, plexClient)
-	if err != nil {
-		response.WriteError(w, err.Error(), http.StatusBadRequest)
-		slog.Error("failed to create Plex scanner", "error", err)
-		return
-	}
-	// trigger scans for each path
-	uniquePaths := make(map[string]bool) // deduplicate scan paths
-	scanPaths := []string{}
+}
+
+func handlePlexManualScan(h *Handler, scanner *plex.Scanner, req *types.RequestScan) {
+	slog.Info("triggering manual scans", "path_count", len(req.Paths))
 
 	for _, path := range req.Paths {
-
 		// map to plex path first
 		plexPath, section := scanner.MapToPlexPath(path)
 		if section == nil {
@@ -71,19 +69,7 @@ func (h *Handler) scan(w http.ResponseWriter, r *http.Request) {
 
 		targetDir = filepath.ToSlash(targetDir)
 
-		// Deduplicate: only add if not already in the map
-		if !uniquePaths[targetDir] {
-			uniquePaths[targetDir] = true
-			scanPaths = append(scanPaths, targetDir)
-		} else {
-			slog.Debug("duplicate scan path detected and skipped", "path", targetDir)
-		}
-	}
-
-	slog.Info("triggering scans for unique paths", "unique", len(scanPaths), "requested", len(req.Paths))
-
-	// Now trigger scans for unique paths
-	for _, targetDir := range scanPaths {
+		// Trigger scan immediately - no deduplication for manual scans
 		go func(p string, s *plex.Scanner) {
 			h.scanSemaphore <- struct{}{}        // acquire a token
 			defer func() { <-h.scanSemaphore }() // release the token
@@ -94,5 +80,4 @@ func (h *Handler) scan(w http.ResponseWriter, r *http.Request) {
 			}
 		}(targetDir, scanner)
 	}
-	response.WriteSuccess(w, "scanned triggered", nil, http.StatusOK)
 }
