@@ -29,8 +29,8 @@ func (m *Manager) Start(req types.RequestStart, handler func(fs_watcher.Event)) 
 	if m.running {
 		return errors.New("watcher is already running")
 	}
-	if len(req.Paths) == 0 {
-		return errors.New("no path provided")
+	if len(req.WatchedDirs) == 0 {
+		return errors.New("no watch_dir provided")
 	}
 	debounce := time.Duration(req.Cooldown) * time.Second
 	if debounce < 0 {
@@ -38,7 +38,7 @@ func (m *Manager) Start(req types.RequestStart, handler func(fs_watcher.Event)) 
 	}
 
 	cfg := fs_watcher.Config{
-		Dirs:           req.Paths,
+		Dirs:           req.WatchedDirs,
 		Recursive:      true,
 		DebounceWindow: debounce,
 		Handler:        handler,
@@ -78,11 +78,11 @@ func (m *Manager) Stop() error {
 }
 
 // Status returns the current status of the watcher
-func (m *Manager) Status() (bool, []string, int) {
+func (m *Manager) Status() (bool, []types.WatchDir, int) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if m.watcher == nil {
-		return false, []string{}, 0
+		return false, nil, 0
 	}
 	return m.running, // is running
 		m.watcher.GetConfig().Dirs, // paths being watched

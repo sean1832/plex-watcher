@@ -17,8 +17,8 @@ type ResponseError struct {
 
 // StatusResponse represents the status of the Plex watcher.
 type StatusResponse struct {
-	IsWatching bool     `json:"is_watching"`
-	Paths      []string `json:"paths"`
-	Server     *string  `json:"server,omitempty"`
-	Cooldown   int      `json:"cooldown"`
+	IsWatching bool       `json:"is_watching"`
+	WatchDirs  []WatchDir `json:"watch_dirs"`
+	Server     *string    `json:"server,omitempty"`
+	Cooldown   int        `json:"cooldown"`
 }

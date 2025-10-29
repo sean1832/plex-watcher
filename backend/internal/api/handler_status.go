@@ -9,7 +9,7 @@ import (
 
 // status returns the current status of the watcher
 func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
-	running, paths, cooldown := h.Watcher.Status()
+	running, watchDirs, cooldown := h.Watcher.Status()
 	status := "stopped"
 	if running {
 		status = "running"
@@ -18,7 +18,7 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 	slog.Info(
 		"Plex watcher status",
 		slog.String("status", status),
-		slog.Any("paths", paths),
+		slog.Any("paths", watchDirs),
 		slog.Int("cooldown", cooldown),
 	)
 
@@ -30,7 +30,7 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 
 	resp := types.StatusResponse{
 		IsWatching: running,
-		Paths:      paths,
+		WatchDirs:  watchDirs,
 		Server:     serverURL,
 		Cooldown:   cooldown,
 	}

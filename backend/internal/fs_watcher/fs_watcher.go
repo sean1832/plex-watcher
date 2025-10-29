@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"plexwatcher/internal/types"
 	"sync"
 	"time"
 
@@ -24,7 +25,7 @@ type Handler func(Event)
 
 // Config controls plexWatcher behaviour
 type Config struct {
-	Dirs []string `json:"dirs"`
+	Dirs []types.WatchDir `json:"dirs"`
 
 	// Recursive causes the watcher to also watch all subdirs
 	Recursive bool `json:"recursive"`
@@ -97,11 +98,15 @@ func (pw *FsWatcher) Start(ctx context.Context) error {
 	}
 	// add only the top-level dirs first. This will be expanded if Recursive is set.
 	for _, dir := range pw.cfg.Dirs {
-		if err := ensureDirExists(dir); err != nil {
+		if !dir.Enabled {
+			slog.Debug("skipping disabled watch dir", "path", dir.Path)
+			continue
+		}
+		if err := ensureDirExists(dir.Path); err != nil {
 			return err
 		}
-		if err := pw.watcher.Add(dir); err != nil {
-			return fmt.Errorf("watcher.Add(%s): %w", dir, err)
+		if err := pw.watcher.Add(dir.Path); err != nil {
+			return fmt.Errorf("watcher.Add(%s): %w", dir.Path, err)
 		}
 	}
 
@@ -113,6 +118,9 @@ func (pw *FsWatcher) Start(ctx context.Context) error {
 	// launch background goroutine to add subdirs if Recursive is set
 	if pw.cfg.Recursive {
 		for _, dir := range pw.cfg.Dirs {
+			if !dir.Enabled {
+				continue
+			}
 			go func(dirToScan string) {
 				slog.Info("starting recursive directory watch setup in background", "path", dirToScan)
 				startTime := time.Now()
@@ -124,7 +132,7 @@ func (pw *FsWatcher) Start(ctx context.Context) error {
 						"path", dirToScan,
 						"elapsed", elapsed.String())
 				}
-			}(dir)
+			}(dir.Path)
 		}
 		slog.Info("recursive watching initiated in background - watcher is ready")
 	}

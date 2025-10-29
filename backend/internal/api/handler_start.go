@@ -53,7 +53,7 @@ func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("plex watcher started.",
 		"server", req.ServerUrl,
-		"dir", req.Paths,
+		"dirs", req.WatchedDirs,
 		"cooldown", req.Cooldown,
 	)
 
