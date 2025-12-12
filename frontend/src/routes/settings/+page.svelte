@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { config } from '$lib/stores/config.svelte';
 	import { testBackendConnection, testPlexConnection } from '$lib/api/endpoints';
-	import Button from "$lib/components/ui/button/button.svelte";
-	import Input from "$lib/components/ui/input/input.svelte";
-	import Separator from "$lib/components/ui/separator/separator.svelte";
+	import Button from '$lib/components/ui/button/button.svelte';
+	import Input from '$lib/components/ui/input/input.svelte';
+	import Separator from '$lib/components/ui/separator/separator.svelte';
 	import RefreshIcon from '@lucide/svelte/icons/refresh-cw';
 	import ServerIcon from '@lucide/svelte/icons/server';
 	import KeyIcon from '@lucide/svelte/icons/key';
@@ -11,33 +11,41 @@
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import XIcon from '@lucide/svelte/icons/x';
+	import { onMount } from 'svelte';
 
 	// Local state bound to inputs
 	let backendUrl = $state(config.backendUrl);
 	let plexServerUrl = $state(config.plexServerUrl);
 	let plexToken = $state(config.plexToken);
 	let cooldownInterval = $state(config.cooldownInterval);
-	
+
 	// Test states
 	let isTestingBackend = $state(false);
 	let backendTestResult = $state<'success' | 'error' | null>(null);
-	
+
 	let isTestingPlex = $state(false);
 	let plexTestResult = $state<'success' | 'error' | null>(null);
-	
+
 	// Save state
 	let isSaving = $state(false);
 	let saveSuccess = $state(false);
 
+	// Load cached watchlist on mount
+	onMount(async () => {
+		await config.loadCachedWatchlist();
+		// Update local state if cache loaded new values
+		cooldownInterval = config.cooldownInterval;
+	});
+
 	async function testBackend() {
 		isTestingBackend = true;
 		backendTestResult = null;
-		
+
 		try {
 			// Create a temporary API client for testing without affecting global state
 			const { createApiClient } = await import('$lib/api/client');
 			const tempClient = createApiClient({ baseUrl: backendUrl });
-			
+
 			// Use the temporary client to test connectivity
 			const result = await tempClient.healthCheck();
 			backendTestResult = result ? 'success' : 'error';
@@ -51,7 +59,7 @@
 	async function testPlex() {
 		isTestingPlex = true;
 		plexTestResult = null;
-		
+
 		try {
 			const result = await testPlexConnection(plexServerUrl, plexToken);
 			plexTestResult = result ? 'success' : 'error';
@@ -65,24 +73,24 @@
 	async function saveSettings() {
 		isSaving = true;
 		saveSuccess = false;
-		
+
 		try {
 			// Check if backend URL changed
 			const urlChanged = backendUrl !== config.backendUrl;
-			
+
 			// Update config store (automatically persists to localStorage)
 			config.backendUrl = backendUrl;
 			config.plexServerUrl = plexServerUrl;
 			config.plexToken = plexToken;
 			config.cooldownInterval = cooldownInterval;
-			
+
 			// If backend URL changed, force refresh connection status
 			if (urlChanged) {
 				await config.loadFromBackend(true);
 			}
-			
+
 			saveSuccess = true;
-			
+
 			// Clear success message after 3 seconds
 			setTimeout(() => {
 				saveSuccess = false;
@@ -98,22 +106,22 @@
 		plexServerUrl = config.plexServerUrl;
 		plexToken = config.plexToken;
 		cooldownInterval = config.cooldownInterval;
-		
+
 		// Navigate back
 		window.location.href = '/';
 	}
-	
+
 	// Check if there are unsaved changes
 	let hasChanges = $derived(
 		backendUrl !== config.backendUrl ||
-		plexServerUrl !== config.plexServerUrl ||
-		plexToken !== config.plexToken ||
-		cooldownInterval !== config.cooldownInterval
+			plexServerUrl !== config.plexServerUrl ||
+			plexToken !== config.plexToken ||
+			cooldownInterval !== config.cooldownInterval
 	);
 </script>
 
 <main class="min-h-screen bg-background">
-	<div class="container mx-auto max-w-7xl px-4 py-8 space-y-8">
+	<div class="container mx-auto max-w-7xl space-y-8 px-4 py-8">
 		<!-- Header -->
 		<div class="space-y-1">
 			<h1 class="text-4xl font-bold tracking-tight">Settings</h1>
@@ -128,7 +136,7 @@
 		<div class="grid gap-6">
 			<!-- Backend Configuration Card -->
 			<div class="rounded-lg border bg-card p-6 shadow-sm">
-				<div class="flex items-center gap-3 mb-6">
+				<div class="mb-6 flex items-center gap-3">
 					<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
 						<DatabaseIcon class="h-5 w-5 text-primary" />
 					</div>
@@ -140,7 +148,7 @@
 
 				<div class="space-y-4">
 					<div class="space-y-2">
-						<label for="backend-url" class="text-sm font-medium leading-none">
+						<label for="backend-url" class="text-sm leading-none font-medium">
 							Backend API URL
 						</label>
 						<div class="flex gap-2">
@@ -161,11 +169,15 @@
 								<span class="sr-only">Test Connection</span>
 							</Button>
 							{#if backendTestResult === 'success'}
-								<div class="flex items-center justify-center w-10 h-10 rounded-md bg-green-100 dark:bg-green-900/20">
+								<div
+									class="flex h-10 w-10 items-center justify-center rounded-md bg-green-100 dark:bg-green-900/20"
+								>
 									<CheckIcon class="h-4 w-4 text-green-600 dark:text-green-400" />
 								</div>
 							{:else if backendTestResult === 'error'}
-								<div class="flex items-center justify-center w-10 h-10 rounded-md bg-red-100 dark:bg-red-900/20">
+								<div
+									class="flex h-10 w-10 items-center justify-center rounded-md bg-red-100 dark:bg-red-900/20"
+								>
 									<XIcon class="h-4 w-4 text-red-600 dark:text-red-400" />
 								</div>
 							{/if}
@@ -179,7 +191,7 @@
 
 			<!-- Plex Server Configuration Card -->
 			<div class="rounded-lg border bg-card p-6 shadow-sm">
-				<div class="flex items-center gap-3 mb-6">
+				<div class="mb-6 flex items-center gap-3">
 					<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
 						<ServerIcon class="h-5 w-5 text-primary" />
 					</div>
@@ -191,9 +203,7 @@
 
 				<div class="space-y-4">
 					<div class="space-y-2">
-						<label for="plex-server" class="text-sm font-medium leading-none">
-							Server URL
-						</label>
+						<label for="plex-server" class="text-sm leading-none font-medium"> Server URL </label>
 						<div class="flex gap-2">
 							<Input
 								id="plex-server"
@@ -212,11 +222,15 @@
 								<span class="sr-only">Test Connection</span>
 							</Button>
 							{#if plexTestResult === 'success'}
-								<div class="flex items-center justify-center w-10 h-10 rounded-md bg-green-100 dark:bg-green-900/20">
+								<div
+									class="flex h-10 w-10 items-center justify-center rounded-md bg-green-100 dark:bg-green-900/20"
+								>
 									<CheckIcon class="h-4 w-4 text-green-600 dark:text-green-400" />
 								</div>
 							{:else if plexTestResult === 'error'}
-								<div class="flex items-center justify-center w-10 h-10 rounded-md bg-red-100 dark:bg-red-900/20">
+								<div
+									class="flex h-10 w-10 items-center justify-center rounded-md bg-red-100 dark:bg-red-900/20"
+								>
 									<XIcon class="h-4 w-4 text-red-600 dark:text-red-400" />
 								</div>
 							{/if}
@@ -227,7 +241,10 @@
 					</div>
 
 					<div class="space-y-2">
-						<label for="plex-token" class="text-sm font-medium leading-none flex items-center gap-2">
+						<label
+							for="plex-token"
+							class="flex items-center gap-2 text-sm leading-none font-medium"
+						>
 							<KeyIcon class="h-4 w-4" />
 							Authentication Token
 						</label>
@@ -246,7 +263,7 @@
 
 			<!-- Watcher Configuration Card -->
 			<div class="rounded-lg border bg-card p-6 shadow-sm">
-				<div class="flex items-center gap-3 mb-6">
+				<div class="mb-6 flex items-center gap-3">
 					<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
 						<TimerIcon class="h-5 w-5 text-primary" />
 					</div>
@@ -258,7 +275,7 @@
 
 				<div class="space-y-4">
 					<div class="space-y-2">
-						<label for="cooldown-interval" class="text-sm font-medium leading-none">
+						<label for="cooldown-interval" class="text-sm leading-none font-medium">
 							Cooldown Interval (seconds)
 						</label>
 						<div class="flex items-center gap-4">
@@ -281,7 +298,7 @@
 		</div>
 
 		<!-- Action Buttons -->
-		<div class="flex justify-between items-center gap-3 pt-4">
+		<div class="flex items-center justify-between gap-3 pt-4">
 			{#if saveSuccess}
 				<div class="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
 					<CheckIcon class="h-4 w-4" />
@@ -290,11 +307,9 @@
 			{:else}
 				<div></div>
 			{/if}
-			
+
 			<div class="flex gap-3">
-				<Button variant="outline" onclick={cancel}>
-					Cancel
-				</Button>
+				<Button variant="outline" onclick={cancel}>Cancel</Button>
 				<Button onclick={saveSettings} disabled={isSaving || !hasChanges}>
 					{isSaving ? 'Saving...' : 'Save Settings'}
 				</Button>

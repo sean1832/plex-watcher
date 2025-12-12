@@ -7,7 +7,12 @@
  */
 
 import { getApiClient, type ApiResponse } from './client';
-import type { StartRequest, ScanRequest, StatusResponse } from '$lib/types/requests';
+import type {
+	StartRequest,
+	ScanRequest,
+	StatusResponse,
+	WatchlistCache
+} from '$lib/types/requests';
 
 /**
  * Get current status of the Plex Watcher
@@ -140,5 +145,26 @@ export async function testPlexConnection(serverUrl: string, token: string): Prom
 	} catch (error) {
 		console.error('Plex connection test failed:', error);
 		return false;
+	}
+}
+
+/**
+ * Get cached watchlist configuration
+ *
+ * Retrieves the previously saved watchlist paths and cooldown from cache.
+ * Returns null if no cache exists.
+ *
+ * @returns Cached watchlist config or null if not found
+ */
+export async function getCachedWatchlist(): Promise<WatchlistCache | null> {
+	const client = getApiClient();
+	try {
+		const response = await client.get<{ code: number; message: string; data: WatchlistCache }>(
+			'/cache'
+		);
+		return response.data;
+	} catch (error) {
+		// Cache not found is expected, not an error
+		return null;
 	}
 }
