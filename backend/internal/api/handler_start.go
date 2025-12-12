@@ -58,6 +58,22 @@ func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 		"cooldown", req.Cooldown,
 	)
 
+	// Save paths/cooldown to cache (no credentials for security)
+	if h.cachePath != "" {
+		cache := types.WatchlistCache{
+			Paths:    req.Paths,
+			Cooldown: req.Cooldown,
+		}
+		cacheData, err := json.MarshalIndent(cache, "", "  ")
+		if err != nil {
+			slog.Error("JSON marshaling failed; skipping cache", "error", err)
+		} else if err := os.WriteFile(h.cachePath, cacheData, 0644); err != nil {
+			slog.Error("failed to write cache file", "error", err, "filepath", h.cachePath)
+		} else {
+			slog.Info("watchlist cached to file", "filepath", h.cachePath)
+		}
+	}
+
 	response.WriteSuccess(w, "watcher started", nil, http.StatusOK)
 }
 
