@@ -60,16 +60,29 @@
 			// Load cached watchlist first (non-blocking, for pre-population if backend is down)
 			await config.loadCachedWatchlist();
 
+			// Update local paths with cached values
+			if (config.watchedPaths.length > 0) {
+				paths = config.watchedPaths.map((dir) => ({
+					id: crypto.randomUUID(),
+					directory: dir,
+					enabled: true
+				}));
+			}
+
 			// Fetch backend status (including paths and watch status)
 			const backendStatusResp = await config.loadFromBackend(true); // Force refresh
 			if (backendStatusResp) {
 				backendStatus = 'online';
 				watchStatus = backendStatusResp.is_watching ? 'watching' : 'stopped';
-				paths = backendStatusResp.paths.map((dir) => ({
-					id: crypto.randomUUID(),
-					directory: dir,
-					enabled: true
-				}));
+				// Only use backend paths if watcher is running (has active paths)
+				// Otherwise keep the cached paths we loaded earlier
+				if (backendStatusResp.is_watching && backendStatusResp.paths.length > 0) {
+					paths = backendStatusResp.paths.map((dir) => ({
+						id: crypto.randomUUID(),
+						directory: dir,
+						enabled: true
+					}));
+				}
 			} else {
 				// Fallback to stored status if API fails but was previously known
 				backendStatus = config.backendStatus === 'unknown' ? 'offline' : config.backendStatus;
@@ -97,8 +110,9 @@
 	});
 
 	async function startWatching() {
-		if (!config.isValid()) {
-			errorMessage = 'Please configure Plex server settings first';
+		// Check Plex credentials first
+		if (!config.plexServerUrl || !config.plexToken) {
+			errorMessage = 'Please configure Plex server URL and token in Settings first';
 			watchStatus = 'error';
 			return;
 		}
@@ -113,6 +127,15 @@
 			if (enabledPaths.length === 0) {
 				errorMessage = 'Please add at least one directory to watch';
 				watchStatus = 'error';
+				isStarting = false;
+				return;
+			}
+
+			// Validate cooldown
+			if (config.cooldownInterval < 5 || config.cooldownInterval > 300) {
+				errorMessage = 'Cooldown must be between 5 and 300 seconds';
+				watchStatus = 'error';
+				isStarting = false;
 				return;
 			}
 

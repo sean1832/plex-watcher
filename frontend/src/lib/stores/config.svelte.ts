@@ -204,7 +204,6 @@ function createConfigStore() {
 				if (cache && cache.paths.length > 0) {
 					// Only update if we don't already have paths in localStorage
 					// or if user explicitly wants to load from cache
-					console.log('Loaded cached watchlist from backend:', cache);
 					state.watchedPaths = cache.paths;
 					state.cooldownInterval = cache.cooldown;
 					saveToStorage(state);
