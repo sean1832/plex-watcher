@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
 	"plexwatcher/internal/fs_watcher"
 	"plexwatcher/internal/plex"
@@ -68,38 +69,44 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 		return
 	}
 
-	// Filter: only process files with allowed extensions
-	// Directories have no extension and are automatically skipped
-	ext := strings.ToLower(filepath.Ext(e.Path))
-	if ext == "" {
-		logger.Debug("skipping directory or extensionless file", "path", e.Path)
+	// Log event type early for debugging
+	eventType := getEventType(e.Op)
+
+	// stat path immediately to check if it exists
+	info, err := os.Stat(e.Path)
+	if os.IsNotExist(err) {
+		logger.Info("path does not exist, skipping", "event", eventType)
 		return
 	}
-	if !ensureExtAllowed(e.Path, h.allowedExtensions) {
-		logger.Debug("disallowed extension, skipping event", "extension", ext)
+	if err != nil {
+		logger.Error("failed to stat path, skipping", "error", err)
 		return
+	}
+
+	// directory vs file
+	if info.IsDir() {
+		if e.Op&fsnotify.Create == fsnotify.Create || e.Op&fsnotify.Rename == fsnotify.Rename {
+			logger.Info("directory change detected, queuing scan", "event", eventType)
+			// proceed to scan logic below
+		} else {
+			logger.Debug("skipping non-creation directory event", "event", eventType)
+			return
+		}
+	} else {
+		ext := strings.ToLower(filepath.Ext(e.Path))
+		if ext == "" {
+			logger.Debug("file has no extension, skipping", "event", eventType)
+			return
+		}
+		if !ensureExtAllowed(e.Path, h.allowedExtensions) {
+			logger.Debug("file extension not allowed, skipping", "extension", ext, "event", eventType)
+			return
+		}
 	}
 
 	if h.scanner == nil {
 		logger.Warn("scanner not initialized, skipping event")
 		return
-	}
-
-	// log event type
-	var eventType string
-	switch {
-	case e.Op&fsnotify.Create == fsnotify.Create:
-		eventType = "CREATE"
-	case e.Op&fsnotify.Write == fsnotify.Write:
-		eventType = "WRITE"
-	case e.Op&fsnotify.Remove == fsnotify.Remove:
-		eventType = "REMOVE"
-	case e.Op&fsnotify.Rename == fsnotify.Rename:
-		eventType = "RENAME"
-	case e.Op&fsnotify.Chmod == fsnotify.Chmod:
-		eventType = "CHMOD"
-	default:
-		eventType = "UNKNOWN"
 	}
 
 	// First, map to Plex path to get section info
@@ -136,18 +143,26 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 
 	// trigger plex scan
 	go func(p string) {
-		h.scanSemaphore <- struct{}{}        // acquire a token
-		defer func() { <-h.scanSemaphore }() // release the token
+		h.scanSemaphore <- struct{}{} // acquire a token
+		defer func() {
+			<-h.scanSemaphore // release the token
 
-		if section, err := h.scanner.ScanPath(h.Context, p); err != nil {
-			slog.Error("scan failed", "scan_target", targetDir, "error", err)
+			// recover from any panic in ScanPath to avoid leaving activeScans locked
+			if r := recover(); r != nil {
+				slog.Error("panic during ScanPath", "scan_target", p, "panic", r)
+			}
+
+			// Ensure we remove from active scans map
+			h.activeScansMutex.Lock()
+			delete(h.activeScans, p)
+			h.activeScansMutex.Unlock()
+		}()
+
+		section, err := h.scanner.ScanPath(h.Context, p)
+		if err != nil {
+			slog.Error("scan failed", "scan_target", p, "error", err)
 		} else {
-			slog.Info("scan triggered", "scan_target", targetDir, "section", section.SectionTitle)
+			slog.Info("scan triggered", "scan_target", p, "section", section.SectionTitle)
 		}
-
-		// Remove from active scans when done
-		h.activeScansMutex.Lock()
-		delete(h.activeScans, p)
-		h.activeScansMutex.Unlock()
 	}(targetDir)
 }
