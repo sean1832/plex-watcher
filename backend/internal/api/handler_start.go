@@ -89,10 +89,23 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 	eventType := getEventType(e.Op)
 	logger.Debug("received fs event", "event", eventType)
 
-	// stat path immediately to check if it exists
+	// Check if this is a delete/remove event - path won't exist anymore
+	isDeleteEvent := e.Op&fsnotify.Remove == fsnotify.Remove
+
+	// For delete events, we can't stat the path - handle separately
+	if isDeleteEvent {
+		logger.Info("delete event detected, queuing scan", "event", eventType)
+		h.handleDeleteEvent(e, logger)
+		return
+	}
+
+	// For non-delete events, stat the path to check if it exists and get info
 	info, err := os.Stat(e.Path)
 	if os.IsNotExist(err) {
-		logger.Info("path does not exist, skipping", "event", eventType)
+		// Path doesn't exist - this can happen with RENAME events on the old path
+		// Treat it like a delete event (the item was moved/renamed away)
+		logger.Info("path no longer exists, treating as delete event", "event", eventType)
+		h.handleDeleteEvent(e, logger)
 		return
 	}
 	if err != nil {
@@ -146,7 +159,35 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 		logger.Debug("file event: calculated scan target", "localScanTarget", localScanTarget)
 	}
 
-	// Now map the calculated target to Plex path
+	h.triggerScan(localScanTarget, eventType, logger)
+}
+
+// handleDeleteEvent handles delete/remove events where the path no longer exists
+func (h *Handler) handleDeleteEvent(e fs_watcher.Event, logger *slog.Logger) {
+	if h.scanner == nil {
+		logger.Warn("scanner not initialized, skipping event")
+		return
+	}
+
+	// For deleted paths, we can't stat to determine if it was a file or directory
+	_, section := h.scanner.MapToPlexPath(e.Path)
+	if section == nil {
+		logger.Warn("path does not map to any Plex library path, skipping scan")
+		return
+	}
+
+	// For delete events, we want to scan the exact path that was deleted
+	// This tells Plex to refresh that specific location and remove the deleted item
+	// We use the path directly, not GetScanPath which would navigate to parent
+	localScanTarget := e.Path
+	logger.Debug("delete event: using deleted path as scan target", "localScanTarget", localScanTarget)
+
+	h.triggerScan(localScanTarget, "REMOVE", logger)
+}
+
+// triggerScan maps a local path to Plex path and triggers the scan
+func (h *Handler) triggerScan(localScanTarget string, eventType string, logger *slog.Logger) {
+	// Map the target to Plex path
 	plexScanTarget, mappedSection := h.scanner.MapToPlexPath(localScanTarget)
 	logger.Debug("mapped to plex path", "localScanTarget", localScanTarget, "plexScanTarget", plexScanTarget)
 	if mappedSection == nil || plexScanTarget == "" {
@@ -156,7 +197,7 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 	}
 	targetDir := filepath.ToSlash(plexScanTarget) // normalize to forward slashes for Plex
 
-	logger.Info("file event detected, queuing scan", "scan_target", targetDir, "event", eventType)
+	logger.Info("queuing scan", "scan_target", targetDir, "event", eventType)
 
 	// Check if this path is already being scanned (deduplication)
 	h.activeScansMutex.Lock()
