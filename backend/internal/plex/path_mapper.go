@@ -1,6 +1,7 @@
 package plex
 
 import (
+	"log/slog"
 	"path/filepath"
 	"plexwatcher/internal/types"
 	"strings"
@@ -15,6 +16,8 @@ func mapToPlexPath(localPath string, sectionRoots []types.PlexSection) (mapped s
 		return "", nil // <-- cannot split
 	}
 	localLower := toLower(localParts)
+
+	slog.Debug("mapToPlexPath: input", "localPath", localPath, "localParts", localParts)
 
 	var (
 		bestK           int
@@ -32,6 +35,8 @@ func mapToPlexPath(localPath string, sectionRoots []types.PlexSection) (mapped s
 		}
 		rootLower := toLower(rootParts)
 
+		slog.Debug("mapToPlexPath: checking root", "rootPath", root.RootPath, "rootParts", rootParts)
+
 		maxK := len(rootParts)
 		for k := maxK; k >= 1; k-- {
 			suffix := rootLower[len(rootLower)-k:] // last k part of the root
@@ -39,6 +44,8 @@ func mapToPlexPath(localPath string, sectionRoots []types.PlexSection) (mapped s
 			for idx := 0; idx <= len(localLower)-k; idx++ {
 				if equalString(localLower[idx:idx+k], suffix) {
 					children := localParts[idx+k:]
+					slog.Debug("mapToPlexPath: suffix match found",
+						"k", k, "idx", idx, "suffix", suffix, "children", children)
 					if k > bestK {
 						bestK = k
 						bestChildren = children
@@ -64,6 +71,8 @@ func mapToPlexPath(localPath string, sectionRoots []types.PlexSection) (mapped s
 
 	// normalize to forward slashes for Plex compatibility (Plex expects Unix-style paths)
 	mapped = filepath.ToSlash(mapped)
+
+	slog.Debug("mapToPlexPath: result", "mapped", mapped, "bestChildren", bestChildren)
 
 	return mapped, &bestSectionRoot
 }
