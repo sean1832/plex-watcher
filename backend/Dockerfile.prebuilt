@@ -15,8 +15,8 @@
 
 FROM alpine:latest
 
-# Install necessary certificates
-RUN apk --no-cache add ca-certificates
+# Install necessary certificates and file utility for binary verification
+RUN apk --no-cache add ca-certificates file
 
 # Create the non-root user
 RUN adduser -D appuser
@@ -27,12 +27,18 @@ WORKDIR /app
 # ARG set by docker buildx automatically: TARGETARCH (amd64/arm64)
 ARG TARGETARCH
 
+# Debug: Print the target architecture during build
+RUN echo "Building for architecture: ${TARGETARCH}"
+
 # Copy the pre-built binary from the build context
 # Expected filename: server-linux-${TARGETARCH}
 COPY dist/server-linux-${TARGETARCH} /app/app
 
 # Make binary executable and set ownership
 RUN chmod +x /app/app && chown appuser:appuser /app/app
+
+# Verify binary exists, is executable, and check its type
+RUN ls -la /app/app && file /app/app
 
 # Switch to the non-root user for security
 USER appuser

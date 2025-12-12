@@ -28,8 +28,10 @@ COPY . .
 # Build argument for version injection
 ARG VERSION=dev
 
-# Build with version injection
-RUN go build -ldflags "-s -w -X main.Version=${VERSION}" -o /go/bin/app ./cmd/server
+# Build with version injection and ensure static linking for target platform
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "-s -w -X main.Version=${VERSION}" -o /go/bin/app ./cmd/server
 
 # ===================
 # STAGE 2: Minimal runtime image
