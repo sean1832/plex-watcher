@@ -78,7 +78,7 @@ func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
-	logger := slog.With("path", e.Path)
+	logger := slog.With("path", e.Path, "op", e.Op.String())
 
 	if e.Err != nil {
 		logger.Error("watcher error", "error", e.Err)
@@ -87,6 +87,7 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 
 	// Log event type early for debugging
 	eventType := getEventType(e.Op)
+	logger.Debug("received fs event", "event", eventType)
 
 	// stat path immediately to check if it exists
 	info, err := os.Stat(e.Path)
@@ -138,13 +139,16 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 		// For directory events (e.g., cut/paste of a folder), scan the directory itself
 		// Don't call GetScanPath which would navigate up the path hierarchy
 		localScanTarget = e.Path
+		logger.Debug("directory event: using path directly as scan target", "localScanTarget", localScanTarget)
 	} else {
 		// For file events, calculate scan target to get to item root (movie folder or show folder)
 		localScanTarget = h.scanner.GetScanPath(e.Path, section.SectionType)
+		logger.Debug("file event: calculated scan target", "localScanTarget", localScanTarget)
 	}
 
 	// Now map the calculated target to Plex path
 	plexScanTarget, mappedSection := h.scanner.MapToPlexPath(localScanTarget)
+	logger.Debug("mapped to plex path", "localScanTarget", localScanTarget, "plexScanTarget", plexScanTarget)
 	if mappedSection == nil || plexScanTarget == "" {
 		logger.Warn("failed to map scan target to Plex path, skipping scan",
 			"local_scan_target", localScanTarget)
