@@ -50,7 +50,8 @@ func main() {
 		"origins", conf.Origins,
 	)
 
-	handler := api.NewHandler(context.Background(), conf.Concurrency, conf.Extensions)
+	const cachePath = "/cache/watcher-config.json"
+	handler := api.NewHandler(context.Background(), conf.Concurrency, conf.Extensions, cachePath)
 
 	mux := http.NewServeMux() // <-- create a new server mux (control the traffic). Request multiplexer
 	handler.RegisterRoutes(mux)

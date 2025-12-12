@@ -20,3 +20,9 @@ export interface StatusResponse {
 	server: string | null;
 	cooldown: number;
 }
+
+// cached watchlist response types
+export interface WatchlistCache {
+	paths: string[];
+	cooldown: number;
+}

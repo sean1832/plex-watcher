@@ -15,6 +15,8 @@ services:
     volumes:
       # Mount your media directories to watch as read-only
       - /path/to/your/media:/media:ro # <-- this should be your media root which contains Movies, TV Shows, etc.
+      # Mount cache directory to persist watcher configuration across restarts
+      - ./cache:/cache
     restart: unless-stopped
     networks:
       - plex-watcher-network

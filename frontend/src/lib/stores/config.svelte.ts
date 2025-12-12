@@ -20,7 +20,7 @@
  */
 
 import { configureApiClient } from '$lib/api/client';
-import { getStatus, testPlexConnection } from '$lib/api/endpoints';
+import { getStatus, testPlexConnection, getCachedWatchlist } from '$lib/api/endpoints';
 import type { StatusResponse } from '$lib/types/requests';
 
 interface ConfigState {
@@ -192,6 +192,26 @@ function createConfigStore() {
 		 */
 		hasBackendUrlChanged(): boolean {
 			return state.lastBackendUrl !== state.backendUrl;
+		},
+
+		/**
+		 * Load cached watchlist from backend
+		 * Pre-populates paths and cooldown if cache exists
+		 */
+		async loadCachedWatchlist(): Promise<void> {
+			try {
+				const cache = await getCachedWatchlist();
+				if (cache && cache.paths.length > 0) {
+					// Only update if we don't already have paths in localStorage
+					// or if user explicitly wants to load from cache
+					console.log('Loaded cached watchlist from backend:', cache);
+					state.watchedPaths = cache.paths;
+					state.cooldownInterval = cache.cooldown;
+					saveToStorage(state);
+				}
+			} catch (error) {
+				console.log('No cached watchlist found or error loading:', error);
+			}
 		},
 
 		/**
