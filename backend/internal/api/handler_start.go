@@ -100,7 +100,8 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 	}
 
 	// directory vs file
-	if info.IsDir() {
+	isDirectory := info.IsDir()
+	if isDirectory {
 		if e.Op&fsnotify.Create == fsnotify.Create || e.Op&fsnotify.Rename == fsnotify.Rename {
 			logger.Info("directory change detected, queuing scan", "event", eventType)
 			// proceed to scan logic below
@@ -132,9 +133,15 @@ func (h *Handler) handleDirUpdate(e fs_watcher.Event) {
 		return
 	}
 
-	// Calculate scan target on LOCAL path first (like Python does)
-	// This gets us to the item root (movie folder or show folder)
-	localScanTarget := h.scanner.GetScanPath(e.Path, section.SectionType)
+	var localScanTarget string
+	if isDirectory {
+		// For directory events (e.g., cut/paste of a folder), scan the directory itself
+		// Don't call GetScanPath which would navigate up the path hierarchy
+		localScanTarget = e.Path
+	} else {
+		// For file events, calculate scan target to get to item root (movie folder or show folder)
+		localScanTarget = h.scanner.GetScanPath(e.Path, section.SectionType)
+	}
 
 	// Now map the calculated target to Plex path
 	plexScanTarget, mappedSection := h.scanner.MapToPlexPath(localScanTarget)
