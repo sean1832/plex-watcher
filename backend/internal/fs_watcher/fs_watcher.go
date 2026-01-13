@@ -163,10 +163,12 @@ func (pw *PlexWatcher) run(ctx context.Context) {
 	)
 
 	flush := func() {
+		slog.Info("flush called", "pendingCount", len(pending))
 		if len(pending) == 0 {
 			return
 		}
 		for p, op := range pending {
+			slog.Info("dispatching event from flush", "path", p, "op", op.String())
 			pw.cfg.Handler(Event{
 				Path: p,
 				Op:   op,
@@ -218,6 +220,7 @@ func (pw *PlexWatcher) run(ctx context.Context) {
 			if !ok {
 				return
 			}
+			slog.Info("fsnotify event received", "path", event.Name, "op", event.Op.String())
 
 			if pw.cfg.Recursive && event.Op&fsnotify.Create == fsnotify.Create {
 				if isDir(event.Name) {
@@ -228,6 +231,7 @@ func (pw *PlexWatcher) run(ctx context.Context) {
 			}
 
 			if debounce <= 0 {
+				slog.Info("debounce disabled, dispatching immediately")
 				pw.cfg.Handler(Event{Path: event.Name, Op: event.Op})
 				continue
 			}
@@ -235,6 +239,7 @@ func (pw *PlexWatcher) run(ctx context.Context) {
 			// accumulate
 			combined := pending[event.Name] | event.Op
 			pending[event.Name] = combined
+			slog.Info("event accumulated", "path", event.Name, "pendingCount", len(pending), "debounceWindow", debounce)
 
 			// (re)arm timer
 			if !timer.Stop() {
@@ -244,8 +249,10 @@ func (pw *PlexWatcher) run(ctx context.Context) {
 				}
 			}
 			timer.Reset(debounce)
+			slog.Info("debounce timer reset", "duration", debounce)
 		case <-timer.C:
 			// Timer expired - flush accumulated events
+			slog.Info("debounce timer expired, flushing events", "pendingCount", len(pending))
 			flush()
 		}
 	}
